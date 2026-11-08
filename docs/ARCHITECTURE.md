@@ -23,7 +23,7 @@ O índice é a fonte de verdade; a fila não depende de uma listagem de diretór
 
 ## Fluxos
 
-1. `SpotDLAdapter` salva os metadados `.spotdl`, calcula diff por identificador estável e executa `spotdl sync` com argumentos estruturados.
+1. `SpotDLAdapter` salva os metadados `.spotdl`, calcula diff por identificador estável e executa `spotdl sync` com argumentos estruturados. O CLI spotDL é instalado com `--no-deps`, depois das dependências seguras do App, porque a interface web opcional do spotDL 4.4.3 declara versões antigas de FastAPI/Uvicorn que não são usadas pela integração.
 2. Cada arquivo é copiado para o cache controlado, validado por `ffprobe`, medido com `loudnorm` e convertido em arquivo final.
 3. A faixa só vira `ready` depois de `ffprobe` confirmar stream, duração e formato do resultado.
 4. O supervisor lê a janela com `ZoneInfo`, confirma dispositivos, reagrupa quando necessário, reaplica volume e toca URL local.

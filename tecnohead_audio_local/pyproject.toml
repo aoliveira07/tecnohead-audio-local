@@ -8,12 +8,11 @@ version = "0.1.0"
 description = "Home Assistant App para biblioteca local de áudio e LinkPlay"
 requires-python = ">=3.12"
 dependencies = [
-  "fastapi==0.103.2",
+  "fastapi==0.162.2",
   "httpx==0.28.1",
   "pydantic==2.10.4",
-  "spotdl==4.4.3",
   "tzdata==2025.2",
-  "uvicorn[standard]==0.23.2",
+  "uvicorn[standard]==0.34.0",
 ]
 
 [tool.pytest.ini_options]

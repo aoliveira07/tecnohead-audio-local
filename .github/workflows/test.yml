@@ -21,9 +21,13 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: tecnohead_audio_local/requirements.txt
+          cache-dependency-path: |
+            tecnohead_audio_local/requirements.txt
+            tecnohead_audio_local/requirements-spotdl.txt
       - name: Install runtime and test dependencies
-        run: python -m pip install -r requirements.txt pytest pytest-asyncio ruff pip-audit pyyaml
+        run: |
+          python -m pip install -r requirements.txt pytest pytest-asyncio ruff pip-audit pyyaml
+          python -m pip install --no-deps -r requirements-spotdl.txt
       - name: Lint
         run: ruff check app tests
       - name: Unit and simulated integration tests
@@ -31,7 +35,7 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q app tests tools
       - name: Dependency audit
-        run: pip-audit -r requirements.txt
+        run: pip-audit
 
   app-config:
     runs-on: ubuntu-latest

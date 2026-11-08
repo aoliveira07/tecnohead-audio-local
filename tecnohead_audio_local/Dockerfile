@@ -27,9 +27,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /tmp/tecnohead-audio-local-requirements.txt
+COPY requirements-spotdl.txt /tmp/tecnohead-audio-local-requirements-spotdl.txt
 RUN python3 -m pip install --break-system-packages --no-cache-dir \
       -r /tmp/tecnohead-audio-local-requirements.txt \
-    && rm /tmp/tecnohead-audio-local-requirements.txt
+    && python3 -m pip install --break-system-packages --no-cache-dir --no-deps \
+      -r /tmp/tecnohead-audio-local-requirements-spotdl.txt \
+    && rm /tmp/tecnohead-audio-local-requirements.txt \
+      /tmp/tecnohead-audio-local-requirements-spotdl.txt
 
 COPY app /opt/tecnohead_audio_local/app
 COPY web /opt/tecnohead_audio_local/web

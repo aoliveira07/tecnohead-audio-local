@@ -1,0 +1,5 @@
+# spotDL 4.4.3 declares obsolete upper bounds for FastAPI and Uvicorn because
+# of its optional web UI. The App does not use that UI; the CLI is installed
+# with --no-deps after the secure App dependency set is resolved.
+spotdl==4.4.3
+
