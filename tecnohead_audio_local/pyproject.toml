@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tecnohead-audio-local"
+version = "0.1.0"
+description = "Home Assistant App para biblioteca local de áudio e LinkPlay"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi==0.103.2",
+  "httpx==0.28.1",
+  "pydantic==2.10.4",
+  "spotdl==4.4.3",
+  "tzdata==2025.2",
+  "uvicorn[standard]==0.23.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 240
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+

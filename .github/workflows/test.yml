@@ -1,0 +1,94 @@
+name: Test TecnoHead Áudio Local
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: tecnohead_audio_local
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tecnohead_audio_local/requirements.txt
+      - name: Install runtime and test dependencies
+        run: python -m pip install -r requirements.txt pytest pytest-asyncio ruff pip-audit pyyaml
+      - name: Lint
+        run: ruff check app tests
+      - name: Unit and simulated integration tests
+        run: pytest -q
+      - name: Compile Python sources
+        run: python -m compileall -q app tests tools
+      - name: Dependency audit
+        run: pip-audit -r requirements.txt
+
+  app-config:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tecnohead_audio_local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install pyyaml
+      - name: Validate manifest and App layout
+        run: python tools/validate_app.py
+
+  container:
+    needs: [unit, app-config]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build both declared platforms without publishing
+        uses: docker/build-push-action@v6
+        with:
+          context: ./tecnohead_audio_local
+          file: ./tecnohead_audio_local/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          tags: tecnohead-audio-local:ci
+          build-args: |
+            BUILD_VERSION=0.1.0
+            BUILD_ARCH=multi
+
+  smoke:
+    needs: [unit, app-config]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build local amd64 image for smoke test
+        run: docker build --tag tecnohead-audio-local:smoke --build-arg BUILD_VERSION=0.1.0 --build-arg BUILD_ARCH=amd64 .
+        working-directory: tecnohead_audio_local
+      - name: Start App and exercise Ingress/media boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name tecnohead-audio-local-smoke \
+            -p 18199:18199 -p 18198:18198 \
+            -e APP_DISABLE_BACKGROUND=1 \
+            tecnohead-audio-local:smoke
+          trap 'docker logs tecnohead-audio-local-smoke; docker rm -f tecnohead-audio-local-smoke' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18199/api/health >/tmp/health.json; then break; fi
+            sleep 2
+          done
+          grep -q '"ok":true' /tmp/health.json
+          curl --fail --silent http://127.0.0.1:18199/ | grep -q 'TecnoHead Áudio Local'
+          curl --fail --silent http://127.0.0.1:18199/static/app.js | grep -q 'new URL'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18198/)" = "404"
+

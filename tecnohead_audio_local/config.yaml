@@ -1,0 +1,42 @@
+name: "TecnoHead Áudio Local"
+slug: "tecnohead_audio_local"
+version: "0.1.0"
+description: >-
+  Biblioteca local de música, normalização loudness e reprodução multiroom
+  nos AudioCast por LinkPlay.
+url: "https://github.com/aoliveira07/tecnohead-audio-local"
+stage: experimental
+startup: application
+boot: auto
+timeout: 60
+
+arch:
+  - amd64
+  - aarch64
+
+image: "ghcr.io/aoliveira07/tecnohead-audio-local"
+init: false
+apparmor: true
+
+# A administração é somente pelo Ingress. Esta porta expõe apenas o servidor
+# de mídia, para que os AudioCast possam buscar os arquivos pela LAN.
+ports:
+  18198/tcp: 18198
+ports_description:
+  18198/tcp: "Stream local somente leitura para os AudioCast/LinkPlay"
+
+ingress: true
+ingress_port: 18199
+panel_icon: mdi:music-box-multiple
+panel_title: TecnoHead Áudio Local
+panel_admin: true
+
+map:
+  - type: data
+    read_only: false
+  - type: media
+    read_only: false
+    path: /media
+
+backup: hot
+

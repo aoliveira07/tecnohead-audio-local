@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <base href="./" />
+    <title>TecnoHead Áudio Local</title>
+    <link rel="stylesheet" href="static/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 64 64" role="img" aria-label="TecnoHead">
+          <path d="M11 15h42v10H39v25H25V25H11z" fill="currentColor" />
+          <circle cx="46" cy="43" r="8" fill="none" stroke="currentColor" stroke-width="5" />
+          <path d="M47 51l8 7" stroke="currentColor" stroke-width="5" stroke-linecap="round" />
+        </svg>
+        <div>
+          <div class="brand-name">TecnoHead</div>
+          <div class="brand-subtitle">Áudio Local</div>
+        </div>
+      </div>
+      <div class="top-actions">
+        <span id="app-version" class="version-badge">v—</span>
+        <span id="app-state" class="status-pill neutral">carregando</span>
+        <button id="refresh" class="icon-button" title="Atualizar">↻</button>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">BIBLIOTECA OFFLINE · LINKPLAY</p>
+          <h1>Som contínuo para a operação.</h1>
+          <p class="hero-copy">Sincronize, normalize e reproduza sua playlist localmente nos AudioCast, com horário, volume e recuperação sob controle.</p>
+        </div>
+        <div class="hero-note"><span class="hero-dot"></span><div><strong id="window-label">Janela —</strong><br /><small>America/Sao_Paulo · 05:30–21:30</small></div></div>
+      </section>
+
+      <nav class="tabs" aria-label="Navegação principal">
+        <button class="tab active" data-tab="overview">Visão geral</button>
+        <button class="tab" data-tab="library">Biblioteca</button>
+        <button class="tab" data-tab="playback">Reprodução</button>
+        <button class="tab" data-tab="settings">Configurações</button>
+        <button class="tab" data-tab="diagnostics">Diagnóstico</button>
+        <button class="tab" data-tab="logs">Logs</button>
+      </nav>
+
+      <section id="tab-overview" class="tab-panel active">
+        <div id="overview-cards" class="metric-grid"></div>
+        <div class="workspace-grid">
+          <article class="panel">
+            <div class="section-heading"><div><p class="eyebrow">AGORA</p><h2>Estado da reprodução</h2></div><button class="button button-ghost" data-action="refresh">Atualizar</button></div>
+            <div id="current-track" class="now-playing empty-state">Nenhuma faixa em reprodução.</div>
+            <div id="device-cards" class="device-grid"></div>
+          </article>
+          <article class="panel">
+            <div class="section-heading"><div><p class="eyebrow">SINCRONIZAÇÃO</p><h2>Última execução</h2></div><button class="button button-primary" data-action="sync">Sincronizar agora</button></div>
+            <div id="sync-card" class="status-card"></div>
+            <div id="alerts" class="alerts"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="tab-library" class="tab-panel">
+        <div class="section-heading"><div><p class="eyebrow">COLEÇÃO LOCAL</p><h2>Biblioteca</h2><p class="muted">Arquivos prontos permanecem no volume persistente do Home Assistant.</p></div><button class="button button-primary" data-action="sync">Sincronizar agora</button></div>
+        <div id="library-metrics" class="metric-grid compact-metrics"></div>
+        <article class="panel">
+          <div class="toolbar"><input id="library-search" class="input" placeholder="Buscar título, artista ou álbum" /><select id="library-status" class="select"><option value="">Todos os estados</option><option value="ready">Prontas</option><option value="failed">Falhas</option><option value="normalizing">Normalizando</option><option value="removed">Removidas</option></select></div>
+          <div class="table-wrap"><table><thead><tr><th>Faixa</th><th>Posição</th><th>Status</th><th>Tamanho</th><th>Ação</th></tr></thead><tbody id="library-table"></tbody></table></div>
+        </article>
+      </section>
+
+      <section id="tab-playback" class="tab-panel">
+        <div class="section-heading"><div><p class="eyebrow">SUPERVISÃO</p><h2>Reprodução</h2><p class="muted">Os comandos só iniciam ou avançam a fila dentro da janela operacional.</p></div><span id="confirmed-command" class="status-pill neutral">sem comando confirmado</span></div>
+        <div class="workspace-grid">
+          <article class="panel">
+            <div class="now-playing large" id="playback-track">Nenhuma faixa selecionada.</div>
+            <div class="button-row playback-controls"><button class="button button-secondary" data-playback="previous">Anterior</button><button class="button button-primary" data-playback="play">Reproduzir</button><button class="button button-secondary" data-playback="pause">Pausar</button><button class="button button-warning" data-playback="stop">Parar</button><button class="button button-secondary" data-playback="next">Próxima</button></div>
+            <label class="range-label">Volume do grupo <output id="volume-output">90%</output><input id="volume-range" type="range" min="0" max="100" step="1" value="90" /></label>
+            <div id="playback-message" class="inline-notice"></div>
+          </article>
+          <article class="panel">
+            <div class="section-heading compact"><div><p class="eyebrow">CONFIRMAÇÃO</p><h2>Grupo LinkPlay</h2></div><button class="button button-ghost small" data-action="group-test">Testar grupo</button></div>
+            <div id="group-state" class="status-card"></div>
+            <div class="hint-box">A confirmação exibida aqui é a resposta da API HTTP. A existência de áudio audível precisa ser validada no equipamento físico.</div>
+          </article>
+        </div>
+      </section>
+
+      <section id="tab-settings" class="tab-panel">
+        <div class="section-heading"><div><p class="eyebrow">COMISSIONAMENTO</p><h2>Configurações</h2><p class="muted">Segredos aparecem apenas como configurados. O stream LAN é somente de mídia.</p></div></div>
+        <form id="settings-form" class="settings-grid">
+          <article class="panel full"><div class="section-heading compact"><div><p class="eyebrow">PLAYLIST</p><h2>Origem e sincronização</h2></div></div><div class="form-grid three"><label>URL da playlist<input id="playlist-url" class="input" type="url" placeholder="https://open.spotify.com/playlist/..." /></label><label>Fuso horário<input id="timezone" class="input" value="America/Sao_Paulo" /></label><label>Horários automáticos<input id="sync-times" class="input" placeholder="03:00, 15:00" /></label></div><div class="form-grid three"><label class="check-label"><input id="sync-enabled" type="checkbox" /> Sincronização automática habilitada</label><label>Alvo loudness (LUFS)<input id="target-lufs" class="input" type="number" min="-40" max="-5" step="0.1" /></label><label>Pico verdadeiro máximo (dBTP)<input id="true-peak" class="input" type="number" min="-6" max="0" step="0.1" /></label></div><div class="form-grid three credential-fields"><label>Spotify Client ID (opcional)<input id="spotify-client-id" class="input" autocomplete="off" placeholder="deixe vazio para manter" /></label><label>Spotify Client Secret (opcional)<input id="spotify-client-secret" class="input" type="password" autocomplete="new-password" placeholder="deixe vazio para manter" /></label><label class="check-label"><input id="clear-spotify-credentials" type="checkbox" /> Remover credenciais salvas</label></div><div id="credential-state" class="hint-box">As credenciais nunca são exibidas; apenas o estado configurado é retornado.</div></article>
+          <article class="panel"><div class="section-heading compact"><div><p class="eyebrow">JANELA</p><h2>Reprodução</h2></div></div><div class="form-grid"><label>Início<input id="window-start" class="input" type="time" /></label><label>Fim<input id="window-end" class="input" type="time" /></label><label>Volume inicial do grupo (%)<input id="playback-volume" class="input" type="number" min="0" max="100" /></label><label class="check-label"><input id="playback-enabled" type="checkbox" /> Reprodução habilitada</label><label class="check-label"><input id="loop-enabled" type="checkbox" /> Loop da playlist</label><label class="check-label"><input id="shuffle-enabled" type="checkbox" /> Embaralhar</label></div></article>
+          <article class="panel"><div class="section-heading compact"><div><p class="eyebrow">MÍDIA LOCAL</p><h2>Acesso dos AudioCast</h2></div></div><div class="form-grid"><label>URL base acessível pela LAN<input id="media-base-url" class="input" placeholder="http://192.168.0.x:18198" /></label><label>Porta do stream<input id="media-port" class="input" type="number" min="1" max="65535" readonly /></label></div><div class="hint-box">A porta 18198 é fixa no manifesto e não oferece painel nem API administrativa. Informe apenas o IP/host do Home Assistant na URL base.</div></article>
+          <article class="panel full"><div class="section-heading compact"><div><p class="eyebrow">AUDIOCAST</p><h2>Dispositivos LinkPlay</h2></div></div><div id="device-settings" class="device-settings"></div></article>
+          <div class="form-actions full"><span id="settings-message" class="form-message"></span><button class="button button-primary" type="submit">Salvar configurações</button></div>
+        </form>
+      </section>
+
+      <section id="tab-diagnostics" class="tab-panel">
+        <div class="section-heading"><div><p class="eyebrow">OBSERVABILIDADE</p><h2>Diagnóstico</h2><p class="muted">As informações exportadas são redigidas e não incluem tokens, cookies ou senhas.</p></div><div class="button-row"><button class="button button-secondary" data-action="diagnostics">Executar diagnóstico</button><a class="button button-ghost" href="api/diagnostics/export">Exportar JSON</a></div></div>
+        <article class="panel"><pre id="diagnostics-output" class="code-block">Execute o diagnóstico para verificar spotDL, FFmpeg, armazenamento e AudioCast.</pre></article>
+      </section>
+
+      <section id="tab-logs" class="tab-panel">
+        <div class="section-heading"><div><p class="eyebrow">EVENTOS</p><h2>Logs redigidos</h2></div><button class="button button-ghost" data-action="logs">Atualizar logs</button></div>
+        <article class="panel"><div id="logs-output" class="event-list"></div></article>
+      </section>
+    </main>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="static/app.js"></script>
+  </body>
+</html>
+
