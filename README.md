@@ -4,7 +4,7 @@ App nativo do Home Assistant OS para manter uma biblioteca de áudio local, norm
 
 ## Estado desta entrega
 
-O código está publicado em `https://github.com/aoliveira07/tecnohead-audio-local` na branch `main`. O commit inicial do App foi enviado; o digest GHCR e a homologação no Home Assistant permanecem dependentes da execução dos workflows e do ambiente remoto.
+O código está publicado em `https://github.com/aoliveira07/tecnohead-audio-local` na branch `main`. A release `v0.1.1` está publicada e o manifesto GHCR foi construído para `linux/amd64` e `linux/arm64`. O App já foi instalado e iniciado no Home Assistant remoto da Padaria; a sincronização e a reprodução audível ainda dependem da playlist e da URL base de mídia.
 
 O App não altera automações da Padaria Imigrantes e não contém regras de AdGuard, bloqueio de Spotify Connect, AirPlay ou firewall.
 
@@ -18,12 +18,12 @@ O App não altera automações da Padaria Imigrantes e não contém regras de Ad
 - Ingress administrativo no porto interno 18199 e stream LAN separado, somente mídia, em 18198;
 - logs, diagnósticos, configurações e exportações redigidos;
 - credenciais opcionais do Spotify configuráveis pelo Ingress, gravadas em `/data/config.json` com modo restrito e nunca devolvidas em texto;
-- imagens `amd64` e `aarch64` publicáveis no GHCR.
+- imagens `amd64` e `aarch64` publicadas no GHCR.
 
 ## Instalação no Home Assistant OS
 
 1. Faça um backup do Home Assistant.
-2. Em **Configurações → Apps → Repositórios**, adicione `https://github.com/aoliveira07/tecnohead-audio-local` quando o repositório estiver publicado.
+2. Em **Configurações → Apps → Repositórios**, adicione `https://github.com/aoliveira07/tecnohead-audio-local`.
 3. Instale **TecnoHead Áudio Local** e abra o painel Ingress.
 4. Informe a playlist, os endereços dos AudioCast e a URL base de mídia acessível pela LAN, por exemplo `http://192.168.0.10:18198`.
 5. Execute **Diagnóstico**, teste cada dispositivo e teste o grupo.
@@ -57,3 +57,4 @@ python tools/validate_app.py
 ```
 
 O build multi-arquitetura é feito no GitHub Actions. Sem Docker local, não se deve declarar que a imagem foi construída no workstation.
+
