@@ -67,7 +67,7 @@ jobs:
           push: false
           tags: tecnohead-audio-local:ci
           build-args: |
-            BUILD_VERSION=0.1.0
+            BUILD_VERSION=0.1.1
             BUILD_ARCH=multi
 
   smoke:
@@ -76,7 +76,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build local amd64 image for smoke test
-        run: docker build --tag tecnohead-audio-local:smoke --build-arg BUILD_VERSION=0.1.0 --build-arg BUILD_ARCH=amd64 .
+        run: docker build --tag tecnohead-audio-local:smoke --build-arg BUILD_VERSION=0.1.1 --build-arg BUILD_ARCH=amd64 .
         working-directory: tecnohead_audio_local
       - name: Start App and exercise Ingress/media boundaries
         shell: bash
