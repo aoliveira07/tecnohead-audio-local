@@ -4,7 +4,7 @@ App nativo do Home Assistant OS para manter uma biblioteca de áudio local, norm
 
 ## Estado desta entrega
 
-O código está implementado no workspace em `tecnohead-audio-local/`. O endereço GitHub de destino é `https://github.com/aoliveira07/tecnohead-audio-local`, mas a verificação em 08/11/2026 retornou `Repository not found`; publicação e digest GHCR ficam pendentes de criação/acesso ao repositório.
+O código está publicado em `https://github.com/aoliveira07/tecnohead-audio-local` na branch `main`. O commit inicial do App foi enviado; o digest GHCR e a homologação no Home Assistant permanecem dependentes da execução dos workflows e do ambiente remoto.
 
 O App não altera automações da Padaria Imigrantes e não contém regras de AdGuard, bloqueio de Spotify Connect, AirPlay ou firewall.
 
@@ -57,4 +57,3 @@ python tools/validate_app.py
 ```
 
 O build multi-arquitetura é feito no GitHub Actions. Sem Docker local, não se deve declarar que a imagem foi construída no workstation.
-
