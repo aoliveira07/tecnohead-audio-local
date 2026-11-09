@@ -1,6 +1,6 @@
 name: "TecnoHead Áudio Local"
 slug: "tecnohead_audio_local"
-version: "0.1.3"
+version: "0.1.4"
 description: >-
   Biblioteca local de música, normalização loudness e reprodução multiroom
   nos AudioCast por LinkPlay.

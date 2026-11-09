@@ -7,13 +7,41 @@ from conftest import FakeAdapter, FakeLoudness, make_entry
 
 from app.library import LibraryManager
 from app.models import TrackStatus
-from app.sync_service import PersistentSyncLock, SpotDLAdapter, SyncBusyError, SyncError, SyncService, parse_spotdl_payload
+from app.sync_service import (
+    PersistentSyncLock,
+    SpotDLAdapter,
+    SyncBusyError,
+    SyncError,
+    SyncService,
+    parse_spotdl_payload,
+    parse_spotify_public_playlist,
+)
 
 
 def test_parse_spotdl_metadata():
     entries = parse_spotdl_payload('{"songs":[{"song_id":"abc123","name":"Título","artists":[{"name":"Artista"}],"album":{"name":"Álbum"},"duration":123}]}')
     assert entries[0].source_id == "abc123"
     assert entries[0].artist == "Artista"
+
+
+def test_parse_spotify_public_playlist_metadata():
+    html = '''
+    <div role="group" aria-label="Faixa Um" data-testid="track-row">
+      <a href="/track/abc123">Faixa Um</a>
+      <span data-testid="internal-artist-link"><a href="/artist/artista1">Artista Um</a></span>
+    </div>
+    <div role="group" aria-label="Faixa Dois" data-testid="track-row">
+      <a href="/track/def456">Faixa Dois</a>
+      <span data-testid="internal-artist-link"><a href="/artist/artista2">Artista Dois</a></span>
+    </div>
+    '''
+
+    entries = parse_spotify_public_playlist(html)
+
+    assert [(entry.source_id, entry.title, entry.artist) for entry in entries] == [
+        ("abc123", "Faixa Um", "Artista Um"),
+        ("def456", "Faixa Dois", "Artista Dois"),
+    ]
 
 
 def test_persistent_lock_rejects_concurrent(paths):
