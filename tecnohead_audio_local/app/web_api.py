@@ -7,7 +7,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.linkplay import LinkPlayError
-from app.models import ConfigUpdate, CredentialUpdate, TrackStatus, public_config
+from app.models import ConfigUpdate, MqttCredentialUpdate, TrackStatus, public_config
 from app.playback import PlaybackError
 from app.runtime import Runtime
 from app.settings import redact_object, redact_text
@@ -74,25 +74,19 @@ async def save_config(payload: ConfigUpdate, request: Request) -> dict[str, Any]
         raise translate_error(exc) from exc
 
 
-@router.put("/credentials")
-async def save_credentials(payload: CredentialUpdate, request: Request) -> dict[str, Any]:
+@router.put("/mqtt/credentials")
+async def save_mqtt_credentials(payload: MqttCredentialUpdate, request: Request) -> dict[str, Any]:
     try:
         runtime = runtime_from(request)
         config = runtime.config.model_copy(deep=True)
         if payload.clear:
-            config.spotify_client_id = ""
-            config.spotify_client_secret = ""
-        if payload.spotify_client_id is not None:
-            config.spotify_client_id = payload.spotify_client_id
-        if payload.spotify_client_secret is not None:
-            config.spotify_client_secret = payload.spotify_client_secret
+            config.mqtt.password = ""
+        if payload.mqtt_password is not None:
+            config.mqtt.password = payload.mqtt_password
         runtime.apply_config(config)
         return {
             "saved": True,
-            "credentials": {
-                "spotify_client_id_configured": bool(config.spotify_client_id),
-                "spotify_client_secret_configured": bool(config.spotify_client_secret),
-            },
+            "mqtt": {"password_configured": bool(config.mqtt.password)},
         }
     except Exception as exc:
         raise translate_error(exc) from exc

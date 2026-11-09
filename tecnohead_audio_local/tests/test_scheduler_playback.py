@@ -16,7 +16,7 @@ def test_window_boundaries_are_explicit():
     assert is_within_window(datetime(2026, 11, 8, 5, 30, tzinfo=zone), "05:30", "21:30")
     assert is_within_window(datetime(2026, 11, 8, 21, 29, tzinfo=zone), "05:30", "21:30")
     assert not is_within_window(datetime(2026, 11, 8, 21, 30, tzinfo=zone), "05:30", "21:30")
-    assert next_sync_at(datetime(2026, 11, 8, 15, 1, tzinfo=zone), AppConfig()).strftime("%H:%M") == "03:00"
+    assert next_sync_at(datetime(2026, 11, 8, 15, 1, tzinfo=zone), AppConfig()).strftime("%H:%M") == "11:00"
 
 
 class FakeLinkPlay:

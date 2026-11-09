@@ -173,15 +173,26 @@ class ConfigStore:
     @staticmethod
     def _migrate(raw: dict[str, Any]) -> dict[str, Any]:
         data = dict(raw)
-        data.setdefault("schema_version", 1)
+        data.setdefault("schema_version", 2)
         data.setdefault("installation_id", secrets.token_hex(16))
         data.setdefault("sync", {})
         data.setdefault("playback", {})
         data.setdefault("normalization", {})
         data.setdefault("linkplay", {})
         data.setdefault("media", {})
+        data.setdefault("mqtt", {})
         data.setdefault("devices", AppConfig().model_dump(mode="json")["devices"])
-        data["schema_version"] = 1
+        # v0.1.x exposed Spotify credentials even though playlist discovery
+        # uses the public page/embed fallback. Drop those fields permanently.
+        data.pop("spotify_client_id", None)
+        data.pop("spotify_client_secret", None)
+        # The first production default was 03:00/15:00. Migrate that untouched
+        # default to the current 11:00/15:00 schedule; custom schedules stay
+        # exactly as configured by the user.
+        sync_data = data.get("sync")
+        if isinstance(sync_data, dict) and sorted(sync_data.get("times") or []) == ["03:00", "15:00"]:
+            sync_data["times"] = ["11:00", "15:00"]
+        data["schema_version"] = 2
         return data
 
     def get(self) -> AppConfig:
@@ -192,7 +203,7 @@ class ConfigStore:
 
     def save(self, config: AppConfig) -> AppConfig:
         with self._lock:
-            config.schema_version = 1
+            config.schema_version = 2
             self.file.write_raw(config.model_dump(mode="json"), mode=0o600)
             self._config = config.model_copy(deep=True)
             return self._config.model_copy(deep=True)

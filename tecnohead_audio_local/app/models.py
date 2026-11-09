@@ -142,7 +142,7 @@ class SyncConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = True
-    times: list[str] = Field(default_factory=lambda: ["03:00", "15:00"], min_length=1, max_length=8)
+    times: list[str] = Field(default_factory=lambda: ["11:00", "15:00"], min_length=1, max_length=8)
     max_parallel_tracks: int = Field(default=1, ge=1, le=2)
 
     @field_validator("times")
@@ -207,20 +207,45 @@ class MediaConfig(BaseModel):
     _validate_base_url = field_validator("base_url")(validate_base_url)
 
 
+MQTT_TOPIC_RE = re.compile(r"^[A-Za-z0-9_./-]{1,200}$")
+
+
+def validate_mqtt_topic(value: str) -> str:
+    value = value.strip().strip("/")
+    if not value or "+" in value or "#" in value or not MQTT_TOPIC_RE.fullmatch(value):
+        raise ValueError("tópico MQTT inválido")
+    return value
+
+
+class MqttConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    host: str = "core-mosquitto"
+    port: int = Field(default=1883, ge=1, le=65_535)
+    username: str = Field(default="", max_length=256)
+    password: str = Field(default="", max_length=512)
+    discovery_prefix: str = Field(default="homeassistant", max_length=200)
+    topic_prefix: str = Field(default="tecnohead/audio_local", max_length=200)
+
+    _validate_host = field_validator("host")(validate_host)
+    _validate_discovery_prefix = field_validator("discovery_prefix")(validate_mqtt_topic)
+    _validate_topic_prefix = field_validator("topic_prefix")(validate_mqtt_topic)
+
+
 class AppConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: int = 1
+    schema_version: int = 2
     installation_id: str = Field(default_factory=lambda: secrets.token_hex(16), min_length=16, max_length=64)
     timezone: str = "America/Sao_Paulo"
     playlist_url: str = Field(default="", max_length=2048)
-    spotify_client_id: str = Field(default="", max_length=256)
-    spotify_client_secret: str = Field(default="", max_length=512)
     sync: SyncConfig = Field(default_factory=SyncConfig)
     playback: PlaybackConfig = Field(default_factory=PlaybackConfig)
     normalization: NormalizationConfig = Field(default_factory=NormalizationConfig)
     linkplay: LinkPlayConfig = Field(default_factory=LinkPlayConfig)
     media: MediaConfig = Field(default_factory=MediaConfig)
+    mqtt: MqttConfig = Field(default_factory=MqttConfig)
     devices: list[DeviceConfig] = Field(
         default_factory=lambda: [
             DeviceConfig(device_id="caixa", name="Caixa", host="192.168.0.13"),
@@ -274,6 +299,21 @@ class PublicMediaConfig(BaseModel):
     _validate_base_url = field_validator("base_url")(validate_base_url)
 
 
+class PublicMqttConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    host: str = "core-mosquitto"
+    port: int = Field(default=1883, ge=1, le=65_535)
+    username: str = Field(default="", max_length=256)
+    discovery_prefix: str = Field(default="homeassistant", max_length=200)
+    topic_prefix: str = Field(default="tecnohead/audio_local", max_length=200)
+
+    _validate_host = field_validator("host")(validate_host)
+    _validate_discovery_prefix = field_validator("discovery_prefix")(validate_mqtt_topic)
+    _validate_topic_prefix = field_validator("topic_prefix")(validate_mqtt_topic)
+
+
 class ConfigUpdate(BaseModel):
     """Public configuration shape. Secret fields intentionally do not exist."""
 
@@ -286,19 +326,19 @@ class ConfigUpdate(BaseModel):
     normalization: NormalizationConfig
     linkplay: LinkPlayConfig
     media: PublicMediaConfig
+    mqtt: PublicMqttConfig
     devices: list[DeviceConfig] = Field(min_length=1, max_length=8)
 
 
-class CredentialUpdate(BaseModel):
-    """Write-only credential fields exposed through the Ingress UI."""
+class MqttCredentialUpdate(BaseModel):
+    """Write-only MQTT password exposed through the Ingress UI."""
 
     model_config = ConfigDict(extra="forbid")
 
-    spotify_client_id: str | None = Field(default=None, max_length=256)
-    spotify_client_secret: str | None = Field(default=None, max_length=512)
+    mqtt_password: str | None = Field(default=None, max_length=512)
     clear: bool = False
 
-    @field_validator("spotify_client_id", "spotify_client_secret")
+    @field_validator("mqtt_password")
     @classmethod
     def blank_values_preserve_existing(cls, value: str | None) -> str | None:
         if value is None:
@@ -362,12 +402,15 @@ def public_config(config: AppConfig) -> dict[str, Any]:
     data = config.model_dump(mode="json")
     data.pop("installation_id", None)
     data.pop("schema_version", None)
-    data.pop("spotify_client_id", None)
-    data.pop("spotify_client_secret", None)
     data["playlist_url"] = redact_url(config.playlist_url) if config.playlist_url else ""
-    data["credentials"] = {
-        "spotify_client_id_configured": bool(config.spotify_client_id),
-        "spotify_client_secret_configured": bool(config.spotify_client_secret),
+    data["mqtt"] = {
+        "enabled": config.mqtt.enabled,
+        "host": config.mqtt.host,
+        "port": config.mqtt.port,
+        "username": config.mqtt.username,
+        "discovery_prefix": config.mqtt.discovery_prefix,
+        "topic_prefix": config.mqtt.topic_prefix,
+        "password_configured": bool(config.mqtt.password),
     }
     data["media"] = {"base_url": config.media.base_url, "port": config.media.port, "stream_token_configured": True}
     return data

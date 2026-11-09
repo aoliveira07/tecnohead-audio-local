@@ -4,20 +4,21 @@ App nativo do Home Assistant OS para manter uma biblioteca de áudio local, norm
 
 ## Estado desta entrega
 
-O código está publicado em `https://github.com/aoliveira07/tecnohead-audio-local` na branch `main`. A release `v0.1.9` mantém a leitura completa pelo embed público do Spotify, usa `ytsearch1:` diretamente quando necessário, repete falhas com backoff e desativa o display Rich interativo no bridge para que os retries não abortem em ambiente sem terminal. As imagens são publicadas para `linux/amd64` e `linux/arm64`. O App já foi instalado e iniciado no Home Assistant remoto da Padaria; a reprodução audível ainda depende da homologação física dos AudioCast.
+O código está publicado em `https://github.com/aoliveira07/tecnohead-audio-local` na branch `main`. A release `v0.2.0` mantém a leitura completa pelo embed público da playlist, usa `ytsearch1:` diretamente quando necessário, repete falhas com backoff e desativa o display Rich interativo no bridge para que os retries não abortem em ambiente sem terminal. A interface segue os parâmetros visuais Smart House do `LG_Local-Thing`, com tema azul-petróleo, cards sólidos, foco acessível e ações responsivas. As imagens são publicadas para `linux/amd64` e `linux/arm64`. O App já foi instalado e iniciado no Home Assistant remoto da Padaria; a reprodução audível ainda depende da homologação física dos AudioCast.
 
 O App não altera automações da Padaria Imigrantes e não contém regras de AdGuard, bloqueio de Spotify Connect, AirPlay ou firewall.
 
 ## Recursos
 
-- spotDL encapsulado sem shell e com lock persistente, sincronização manual e às 03:00/15:00 em `America/Sao_Paulo`;
+- spotDL encapsulado sem shell e com lock persistente, sincronização manual e agenda configurável de 1 a 8 horários, com padrão às 11:00/15:00 em `America/Sao_Paulo`;
 - biblioteca em `/media/tecnohead-audio-local/library`, índice e cache em `/data`;
 - FFmpeg `loudnorm` em duas passagens, alvo inicial `-18 LUFS` e `-2 dBTP`, com fallback dinâmico documentado;
 - cliente LinkPlay com timeout/retry, leitura de estado, grupo, volume, loop, play/pause/next/previous e recuperação;
 - janela operacional 05:30–21:30, sem reinício automático fora dela;
 - Ingress administrativo no porto interno 18199 e stream LAN separado, somente mídia, em 18198;
 - logs, diagnósticos, configurações e exportações redigidos;
-- credenciais opcionais do Spotify configuráveis pelo Ingress, gravadas em `/data/config.json` com modo restrito e nunca devolvidas em texto;
+- botão `Sincronizar músicas` publicado por MQTT Discovery, com comando `SYNC` e status retido para automações e Alexa;
+- senha opcional do broker MQTT gravada em `/data/config.json` com modo restrito e nunca devolvida em texto; a playlist pública não exige Client ID ou Client Secret do Spotify;
 - imagens `amd64` e `aarch64` publicadas no GHCR.
 
 ## Instalação no Home Assistant OS

@@ -8,12 +8,13 @@ from app.library import LibraryManager
 from app.linkplay import LinkPlayClient
 from app.loudness import LoudnessProcessor
 from app.models import AppConfig, public_config
+from app.mqtt import MqttService
 from app.settings import AppPaths, EventLog, StateStore, redact_object
 from app.sync_service import SyncService
 
 
 class DiagnosticsService:
-    def __init__(self, config: AppConfig, paths: AppPaths, library: LibraryManager, loudness: LoudnessProcessor, linkplay: LinkPlayClient, sync: SyncService, state: StateStore, events: EventLog):
+    def __init__(self, config: AppConfig, paths: AppPaths, library: LibraryManager, loudness: LoudnessProcessor, linkplay: LinkPlayClient, sync: SyncService, state: StateStore, events: EventLog, mqtt: MqttService | None = None):
         self.config = config
         self.paths = paths
         self.library = library
@@ -22,6 +23,7 @@ class DiagnosticsService:
         self.sync = sync
         self.state = state
         self.events = events
+        self.mqtt = mqtt
 
     def update_config(self, config: AppConfig) -> None:
         self.config = config
@@ -67,6 +69,7 @@ class DiagnosticsService:
             "tools": {
                 "spotdl": {"state": "available" if shutil.which(self.sync.adapter.executable) else "missing"},
                 "ffmpeg": {"state": "available" if self.loudness.available() else "missing"},
+                "mqtt": self.mqtt.diagnostics() if self.mqtt else {"enabled": False, "state": "not_configured"},
             },
             "storage": {"space": self._space(), "permissions": self._write_checks()},
             "devices": status,

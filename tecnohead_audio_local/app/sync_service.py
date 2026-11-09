@@ -240,12 +240,6 @@ class SpotDLAdapter:
         tool_name: str = "spotDL",
     ) -> str:
         environment = os.environ.copy()
-        if config.spotify_client_id:
-            environment["SPOTIPY_CLIENT_ID"] = config.spotify_client_id
-            environment["SPOTIFY_CLIENT_ID"] = config.spotify_client_id
-        if config.spotify_client_secret:
-            environment["SPOTIPY_CLIENT_SECRET"] = config.spotify_client_secret
-            environment["SPOTIFY_CLIENT_SECRET"] = config.spotify_client_secret
         try:
             process = await asyncio.create_subprocess_exec(
                 *command,

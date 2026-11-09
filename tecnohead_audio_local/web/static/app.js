@@ -68,18 +68,32 @@
     }).join("") : `<tr><td colspan="5" class="empty-state">Nenhuma faixa encontrada. Configure a playlist e execute uma sincronização.</td></tr>`;
   }
 
+  function renderSyncTimes(times) {
+    const values = (times && times.length ? times : ["11:00", "15:00"]).slice(0, 8);
+    $("#sync-times-list").innerHTML = values.map((time, index) => `<div class="schedule-row"><label>Horário ${index + 1}<input class="input sync-time" data-sync-time type="time" value="${esc(time)}" required /></label><button type="button" class="button button-ghost small" data-remove-sync="${index}" ${values.length <= 1 ? "disabled" : ""}>Remover</button></div>`).join("");
+    $("#sync-times-hint").textContent = `${values.length} horário${values.length === 1 ? "" : "s"} configurado${values.length === 1 ? "" : "s"}. O fuso é ${esc($("#timezone").value || "America/Sao_Paulo")}.`;
+  }
+
   function fillSettings() {
     const config = state.config || {};
     $("#playlist-url").value = config.playlist_url || "";
     $("#timezone").value = config.timezone || "America/Sao_Paulo";
-    $("#sync-times").value = (config.sync?.times || ["03:00", "15:00"]).join(", ");
+    renderSyncTimes(config.sync?.times || ["11:00", "15:00"]);
     $("#sync-enabled").checked = config.sync?.enabled !== false;
     $("#target-lufs").value = config.normalization?.target_lufs ?? -18;
     $("#true-peak").value = config.normalization?.true_peak_db ?? -2;
-    $("#spotify-client-id").value = "";
-    $("#spotify-client-secret").value = "";
-    $("#clear-spotify-credentials").checked = false;
-    $("#credential-state").textContent = `Client ID: ${config.credentials?.spotify_client_id_configured ? "configurado" : "não configurado"}; segredo: ${config.credentials?.spotify_client_secret_configured ? "configurado" : "não configurado"}. Campos vazios preservam o valor salvo.`;
+    $("#mqtt-enabled").checked = config.mqtt?.enabled !== false;
+    $("#mqtt-host").value = config.mqtt?.host || "core-mosquitto";
+    $("#mqtt-port").value = config.mqtt?.port || 1883;
+    $("#mqtt-username").value = config.mqtt?.username || "";
+    $("#mqtt-password").value = "";
+    $("#clear-mqtt-password").checked = false;
+    $("#mqtt-discovery-prefix").value = config.mqtt?.discovery_prefix || "homeassistant";
+    $("#mqtt-topic-prefix").value = config.mqtt?.topic_prefix || "tecnohead/audio_local";
+    $("#mqtt-credential-state").textContent = `Senha MQTT: ${config.mqtt?.password_configured ? "configurada" : "não configurada"}. O botão será descoberto automaticamente quando o broker aceitar a conexão.`;
+    const mqttState = $("#mqtt-state");
+    mqttState.textContent = config.mqtt?.enabled === false ? "Desativado" : (config.mqtt?.password_configured ? "Configurado" : "Padrão do HA");
+    mqttState.className = `status-pill ${config.mqtt?.enabled === false ? "neutral" : "ok"}`;
     $("#window-start").value = config.playback?.window_start || "05:30";
     $("#window-end").value = config.playback?.window_end || "21:30";
     $("#playback-volume").value = config.playback?.volume_percent ?? 90;
@@ -96,16 +110,15 @@
   function collectConfig() {
     const current = state.config || {};
     const devices = (current.devices || []).map((device) => ({ ...device, host: $(`.device-host[data-device="${CSS.escape(device.device_id)}"]`).value.trim(), port: Number($(`.device-port[data-device="${CSS.escape(device.device_id)}"]`).value), volume_percent: Number($(`.device-volume[data-device="${CSS.escape(device.device_id)}"]`).value), enabled: $(`.device-enabled[data-device="${CSS.escape(device.device_id)}"]`).checked }));
-    return { timezone: $("#timezone").value.trim(), playlist_url: $("#playlist-url").value.trim(), sync: { ...current.sync, enabled: $("#sync-enabled").checked, times: $("#sync-times").value.split(",").map((item) => item.trim()).filter(Boolean) }, playback: { ...current.playback, enabled: $("#playback-enabled").checked, window_start: $("#window-start").value, window_end: $("#window-end").value, volume_percent: Number($("#playback-volume").value), loop: $("#loop-enabled").checked, shuffle: $("#shuffle-enabled").checked }, normalization: { ...current.normalization, enabled: true, target_lufs: Number($("#target-lufs").value), true_peak_db: Number($("#true-peak").value) }, linkplay: current.linkplay, media: { base_url: $("#media-base-url").value.trim(), port: Number($("#media-port").value) }, devices };
+    const times = [...document.querySelectorAll("[data-sync-time]")].map((input) => input.value.trim()).filter(Boolean);
+    return { timezone: $("#timezone").value.trim(), playlist_url: $("#playlist-url").value.trim(), sync: { ...current.sync, enabled: $("#sync-enabled").checked, times }, playback: { ...current.playback, enabled: $("#playback-enabled").checked, window_start: $("#window-start").value, window_end: $("#window-end").value, volume_percent: Number($("#playback-volume").value), loop: $("#loop-enabled").checked, shuffle: $("#shuffle-enabled").checked }, normalization: { ...current.normalization, enabled: true, target_lufs: Number($("#target-lufs").value), true_peak_db: Number($("#true-peak").value) }, linkplay: current.linkplay, media: { base_url: $("#media-base-url").value.trim(), port: Number($("#media-port").value) }, mqtt: { enabled: $("#mqtt-enabled").checked, host: $("#mqtt-host").value.trim(), port: Number($("#mqtt-port").value), username: $("#mqtt-username").value.trim(), discovery_prefix: $("#mqtt-discovery-prefix").value.trim(), topic_prefix: $("#mqtt-topic-prefix").value.trim() }, devices };
   }
 
-  function collectCredentials() {
+  function collectMqttCredentials() {
     const payload = {};
-    const clientId = $("#spotify-client-id").value.trim();
-    const clientSecret = $("#spotify-client-secret").value.trim();
-    if (clientId) payload.spotify_client_id = clientId;
-    if (clientSecret) payload.spotify_client_secret = clientSecret;
-    if ($("#clear-spotify-credentials").checked) payload.clear = true;
+    const password = $("#mqtt-password").value.trim();
+    if (password) payload.mqtt_password = password;
+    if ($("#clear-mqtt-password").checked) payload.clear = true;
     return payload;
   }
 
@@ -120,8 +133,8 @@
   async function loadLogs() { try { const result = await api("logs?limit=200"); $("#logs-output").innerHTML = (result.items || []).reverse().map((item) => `<div class="event"><div class="event-head"><span class="event-name">${esc(item.event)}</span><span class="event-time">${esc(formatDate(item.at))}</span></div><div class="event-message">${esc(item.message)}</div></div>`).join("") || `<div class="empty-state">Nenhum evento registrado.</div>`; } catch (error) { toast(error.message, true); } }
   async function saveSettings({ notify = true } = {}) {
     const result = await api("config", { method: "PUT", body: JSON.stringify(collectConfig()) });
-    const credentials = collectCredentials();
-    if (Object.keys(credentials).length) await api("credentials", { method: "PUT", body: JSON.stringify(credentials) });
+    const credentials = collectMqttCredentials();
+    if (Object.keys(credentials).length) await api("mqtt/credentials", { method: "PUT", body: JSON.stringify(credentials) });
     state.config = result;
     $("#settings-message").textContent = "Configurações salvas.";
     if (notify) toast("Configurações salvas.");
@@ -141,6 +154,8 @@
     const action = event.target.closest("[data-action]"); if (action) { if (action.dataset.action === "sync") triggerSync(); if (action.dataset.action === "refresh") refresh(); if (action.dataset.action === "diagnostics") runDiagnostics(); if (action.dataset.action === "logs") loadLogs(); if (action.dataset.action === "group-test") testGroup(); }
     const playback = event.target.closest("[data-playback]"); if (playback) playbackAction(playback.dataset.playback);
     const retry = event.target.closest("[data-retry]"); if (retry) retryTrack(retry.dataset.retry);
+    const removeSchedule = event.target.closest("[data-remove-sync]"); if (removeSchedule) { const values = [...document.querySelectorAll("[data-sync-time]")].map((input) => input.value).filter(Boolean); values.splice(Number(removeSchedule.dataset.removeSync), 1); renderSyncTimes(values); }
+    const preset = event.target.closest("[data-schedule-preset]"); if (preset) renderSyncTimes(["11:00", "15:00"]);
   });
   $("#refresh").addEventListener("click", refresh);
   $("#library-search").addEventListener("input", () => { window.clearTimeout(refresh.libraryTimer); refresh.libraryTimer = window.setTimeout(refresh, 250); });
@@ -148,6 +163,8 @@
   $("#volume-range").addEventListener("input", (event) => { $("#volume-output").textContent = `${event.target.value}%`; });
   $("#volume-range").addEventListener("change", async (event) => { try { await api("playback/volume", { method: "POST", body: JSON.stringify({ volume_percent: Number(event.target.value) }) }); toast("Volume do grupo confirmado."); } catch (error) { toast(error.message, true); } });
   $("#settings-form").addEventListener("submit", async (event) => { event.preventDefault(); try { await saveSettings(); } catch (error) { $("#settings-message").textContent = error.message; toast(error.message, true); } });
+  $("#add-sync-time").addEventListener("click", () => { const values = [...document.querySelectorAll("[data-sync-time]")].map((input) => input.value).filter(Boolean); if (values.length >= 8) return toast("A agenda aceita no máximo 8 horários.", true); values.push("18:00"); renderSyncTimes(values); });
+  $("#timezone").addEventListener("change", () => { const values = [...document.querySelectorAll("[data-sync-time]")].map((input) => input.value).filter(Boolean); renderSyncTimes(values); });
   refresh();
   window.setInterval(refresh, 20000);
 })();

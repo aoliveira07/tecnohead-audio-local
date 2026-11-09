@@ -9,6 +9,7 @@ from app.library import LibraryManager
 from app.linkplay import LinkPlayClient
 from app.loudness import LoudnessProcessor
 from app.models import AppConfig, ConfigUpdate, Track
+from app.mqtt import MqttService
 from app.playback import PlaybackSupervisor
 from app.scheduler import SyncScheduler
 from app.settings import AppPaths, ConfigStore, EventLog, StateStore, public_config
@@ -30,7 +31,8 @@ class Runtime:
         self.sync = SyncService(self.config, self.paths, self.library, self.loudness, self.state_store, self.events, SpotDLAdapter(self.paths))
         self.playback = PlaybackSupervisor(self.config, self.paths, self.library, self.linkplay, self.state_store, self.events)
         self.scheduler = SyncScheduler(self.config, self.sync, self.events)
-        self.diagnostics_service = DiagnosticsService(self.config, self.paths, self.library, self.loudness, self.linkplay, self.sync, self.state_store, self.events)
+        self.mqtt = MqttService(self.config, self.events, self._request_sync_from_mqtt)
+        self.diagnostics_service = DiagnosticsService(self.config, self.paths, self.library, self.loudness, self.linkplay, self.sync, self.state_store, self.events, self.mqtt)
         self._tasks: list[asyncio.Task[Any]] = []
         self.started = False
 
@@ -43,8 +45,10 @@ class Runtime:
             self._tasks = [asyncio.create_task(self.scheduler.run(), name="tecnohead-audio-scheduler")]
             if self.config.playback.supervise:
                 self._tasks.append(asyncio.create_task(self.playback.run(), name="tecnohead-audio-playback"))
+            self.mqtt.start(asyncio.get_running_loop())
 
     async def stop(self) -> None:
+        self.mqtt.stop()
         self.scheduler.stop()
         self.playback.stop()
         for task in self._tasks:
@@ -61,6 +65,7 @@ class Runtime:
         self.playback.update_config(self.config)
         self.scheduler.update_config(self.config)
         self.diagnostics_service.update_config(self.config)
+        self.mqtt.update_config(self.config)
         return self.config
 
     def public_config(self) -> dict[str, Any]:
@@ -103,8 +108,27 @@ class Runtime:
         public_data = payload.model_dump(mode="json")
         data.update({key: value for key, value in public_data.items() if key != "media"})
         data["media"] = {**data.get("media", {}), **public_data["media"]}
+        data["mqtt"] = {**data.get("mqtt", {}), **public_data["mqtt"], "password": current.mqtt.password}
         # The Supervisor publishes the dedicated media-only port from the
         # manifest. Keep it fixed; only the LAN base URL is user-configurable.
         data["media"]["port"] = 18198
         return self.apply_config(AppConfig.model_validate(data))
+
+    def _request_sync_from_mqtt(self) -> None:
+        try:
+            task = self.sync.start(reason="mqtt")
+        except Exception as exc:
+            self.events.append("mqtt_sync_rejected", "solicitação MQTT não iniciou a sincronização", error=str(exc))
+            self.mqtt.publish_sync_status("failed")
+            return
+        self.mqtt.publish_sync_status("running")
+        self.events.append("sync_mqtt", "sincronização iniciada pelo botão MQTT")
+        task.add_done_callback(self._finish_mqtt_sync)
+
+    def _finish_mqtt_sync(self, task: asyncio.Task[Any]) -> None:
+        try:
+            task.result()
+        except Exception:
+            pass
+        self.mqtt.publish_sync_status(self.sync.current_state().status)
 

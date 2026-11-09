@@ -35,5 +35,5 @@ O frontend usa URLs relativas e não conhece o prefixo Ingress. O porto 18199 n�
 
 Como o Supervisor não conhece automaticamente o IP LAN adequado para cada AudioCast, `media.base_url` é editável e inicia vazio. A porta publicada é fixa em 18198; somente o host da URL é configurável. Sem essa configuração, o playback não inicia e a UI mostra a pendência.
 
-Credenciais opcionais do Spotify são gravadas pelo endpoint Ingress `/api/credentials`; o formulário é write-only, campos vazios preservam o valor existente e a resposta contém somente flags `configured`. O `spotDL` recebe os valores apenas no ambiente do subprocesso.
+Não há credenciais do Spotify: a descoberta usa a página/embed público da playlist e o `spotDL` recebe somente as faixas resolvidas. O App conecta opcionalmente ao broker MQTT, publica configuração MQTT Discovery para um botão `Sincronizar músicas` e recebe `SYNC` no tópico configurado; a senha do broker é write-only no Ingress.
 
