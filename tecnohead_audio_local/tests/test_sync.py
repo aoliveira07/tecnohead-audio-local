@@ -44,6 +44,20 @@ def test_parse_spotify_public_playlist_metadata():
     ]
 
 
+def test_public_fallback_song_row_has_complete_downloader_metadata():
+    entry = make_entry()
+    row = SpotDLAdapter._fallback_song_row(
+        entry,
+        "https://www.youtube.com/watch?v=example",
+        "https://open.spotify.com/playlist/example",
+        1,
+    )
+
+    assert row["download_url"].startswith("https://www.youtube.com/")
+    assert row["album_id"] == entry.source_id
+    assert all(row[field] is not None for field in ("genres", "disc_count", "track_number", "album_id", "album_artist"))
+
+
 def test_persistent_lock_rejects_concurrent(paths):
     first = PersistentSyncLock(paths.lock_file)
     second = PersistentSyncLock(paths.lock_file)

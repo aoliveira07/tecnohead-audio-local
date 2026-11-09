@@ -245,7 +245,10 @@ class SpotDLAdapter:
             "download_url": youtube_url,
             "lyrics": None,
             "popularity": None,
-            "album_id": None,
+            # The spotDL downloader reinitializes songs with missing album data.
+            # A stable local value keeps the already-resolved YouTube URL and
+            # avoids a second Spotify API lookup in the public-page fallback.
+            "album_id": entry.source_id,
             "list_name": "TecnoHead Áudio Local",
             "list_url": playlist_url,
             "list_position": entry.position,
