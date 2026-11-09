@@ -31,6 +31,9 @@ def main() -> None:
         "format": args.output_format,
         "bitrate": args.bitrate,
         "threads": 1,
+        # The App runs without an interactive terminal. Rich's live display
+        # leaks its global console between retry passes and aborts the bridge.
+        "simple_tui": True,
         "scan_for_songs": False,
         "overwrite": "skip",
         "sync_without_deleting": True,
