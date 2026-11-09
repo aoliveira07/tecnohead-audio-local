@@ -118,17 +118,16 @@ class _SpotifyPublicPlaylistParser(HTMLParser):
             self._artist_buffer.append(data)
 
 
-def parse_spotify_public_playlist(text: str) -> list[PlaylistEntry]:
-    parser = _SpotifyPublicPlaylistParser()
-    parser.feed(text)
+def _entries_from_spotify_rows(rows: list[dict[str, Any]]) -> list[PlaylistEntry]:
     entries: list[PlaylistEntry] = []
     seen: set[str] = set()
-    for item in parser.tracks:
+    for item in rows:
         source_id = str(item["source_id"])
         if source_id in seen:
             continue
         seen.add(source_id)
         source_url = f"https://open.spotify.com/track/{source_id}"
+        duration_seconds = item.get("duration_seconds")
         entries.append(
             playlist_entry_from_mapping(
                 {
@@ -136,6 +135,7 @@ def parse_spotify_public_playlist(text: str) -> list[PlaylistEntry]:
                     "name": item["title"],
                     "artists": item["artists"],
                     "url": source_url,
+                    "duration_seconds": duration_seconds,
                 },
                 len(entries),
             )
@@ -143,6 +143,59 @@ def parse_spotify_public_playlist(text: str) -> list[PlaylistEntry]:
     if not entries:
         raise SyncError("a página pública do Spotify não contém faixas reconhecíveis")
     return entries
+
+
+def parse_spotify_public_playlist(text: str) -> list[PlaylistEntry]:
+    parser = _SpotifyPublicPlaylistParser()
+    parser.feed(text)
+    return _entries_from_spotify_rows(parser.tracks)
+
+
+def parse_spotify_embed_playlist(text: str) -> list[PlaylistEntry]:
+    """Extract the complete trackList exposed by Spotify's public embed page."""
+
+    marker = '"trackList":'
+    try:
+        start = text.index(marker) + len(marker)
+        track_list, _ = json.JSONDecoder().raw_decode(text[start:])
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise SyncError("o embed público do Spotify não contém uma lista reconhecível") from exc
+    if not isinstance(track_list, list):
+        raise SyncError("o embed público do Spotify não contém uma lista de faixas")
+
+    rows: list[dict[str, Any]] = []
+    for item in track_list:
+        if not isinstance(item, dict):
+            continue
+        uri = str(item.get("uri") or "")
+        source_id = uri.removeprefix("spotify:track:")
+        if not re.fullmatch(r"[A-Za-z0-9]+", source_id):
+            continue
+        title = str(item.get("title") or "").strip()
+        artist = str(item.get("subtitle") or "").strip()
+        if not title:
+            continue
+        duration_ms = item.get("duration")
+        try:
+            duration_seconds = float(duration_ms) / 1000 if duration_ms is not None else None
+        except (TypeError, ValueError):
+            duration_seconds = None
+        rows.append(
+            {
+                "source_id": source_id,
+                "title": title,
+                "artists": [artist] if artist else [],
+                "duration_seconds": duration_seconds,
+            }
+        )
+    return _entries_from_spotify_rows(rows)
+
+
+def spotify_embed_playlist_url(playlist_url: str) -> str | None:
+    match = re.search(r"open\.spotify\.com/(?:[^/]+/)?playlist/([A-Za-z0-9]+)", playlist_url)
+    if not match:
+        return None
+    return f"https://open.spotify.com/embed/playlist/{match.group(1)}"
 
 
 class SpotDLAdapter:
@@ -289,19 +342,31 @@ class SpotDLAdapter:
         return None
 
     async def _fetch_public_fallback(self, config: AppConfig, save_file: Path) -> list[PlaylistEntry]:
-        try:
-            timeout = httpx.Timeout(self.PUBLIC_PAGE_TIMEOUT_SECONDS, connect=10.0)
-            async with httpx.AsyncClient(
-                follow_redirects=True,
-                timeout=timeout,
-                headers={"User-Agent": "TecnoHead-Audio-Local/0.1"},
-            ) as client:
-                response = await client.get(config.playlist_url)
-                response.raise_for_status()
-        except httpx.HTTPError as exc:
-            raise SyncError(f"não foi possível ler a página pública do Spotify: {redact_text(str(exc))}") from exc
+        timeout = httpx.Timeout(self.PUBLIC_PAGE_TIMEOUT_SECONDS, connect=10.0)
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=timeout,
+            headers={"User-Agent": "TecnoHead-Audio-Local/0.1"},
+        ) as client:
+            entries: list[PlaylistEntry] | None = None
+            embed_url = spotify_embed_playlist_url(config.playlist_url)
+            if embed_url:
+                try:
+                    embed_response = await client.get(embed_url)
+                    embed_response.raise_for_status()
+                    entries = parse_spotify_embed_playlist(embed_response.text)
+                    LOGGER.info("fallback embed público do Spotify preparado com %s faixas", len(entries))
+                except (httpx.HTTPError, SyncError) as exc:
+                    LOGGER.warning("não foi possível ler o embed público do Spotify; usando a página normal: %s", redact_text(str(exc)))
+            if entries is None:
+                try:
+                    response = await client.get(config.playlist_url)
+                    response.raise_for_status()
+                    entries = parse_spotify_public_playlist(response.text)
+                    LOGGER.info("fallback da página pública do Spotify preparado com %s faixas", len(entries))
+                except (httpx.HTTPError, SyncError) as exc:
+                    raise SyncError(f"não foi possível ler a página pública do Spotify: {redact_text(str(exc))}") from exc
 
-        entries = parse_spotify_public_playlist(response.text)
         semaphore = asyncio.Semaphore(max(1, config.sync.max_parallel_tracks))
 
         async def resolve(entry: PlaylistEntry) -> tuple[str, str | None]:

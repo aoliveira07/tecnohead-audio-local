@@ -14,7 +14,9 @@ from app.sync_service import (
     SyncError,
     SyncService,
     parse_spotdl_payload,
+    parse_spotify_embed_playlist,
     parse_spotify_public_playlist,
+    spotify_embed_playlist_url,
 )
 
 
@@ -42,6 +44,21 @@ def test_parse_spotify_public_playlist_metadata():
         ("abc123", "Faixa Um", "Artista Um"),
         ("def456", "Faixa Dois", "Artista Dois"),
     ]
+
+
+def test_parse_spotify_embed_playlist_metadata():
+    text = '{"trackList":[{"uri":"spotify:track:abc123","title":"Faixa Um","subtitle":"Artista Um","duration":123000},{"uri":"spotify:track:def456","title":"Faixa Dois","subtitle":"Artista Dois","duration":245000}]}'
+
+    entries = parse_spotify_embed_playlist(text)
+
+    assert [(entry.source_id, entry.title, entry.artist, entry.duration_seconds) for entry in entries] == [
+        ("abc123", "Faixa Um", "Artista Um", 123.0),
+        ("def456", "Faixa Dois", "Artista Dois", 245.0),
+    ]
+
+
+def test_spotify_embed_playlist_url():
+    assert spotify_embed_playlist_url("https://open.spotify.com/playlist/abc123?si=secret") == "https://open.spotify.com/embed/playlist/abc123"
 
 
 def test_public_fallback_song_row_has_complete_downloader_metadata():
