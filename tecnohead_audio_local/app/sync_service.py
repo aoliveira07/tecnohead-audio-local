@@ -55,6 +55,9 @@ def parse_spotdl_payload(text: str) -> list[PlaylistEntry]:
 
 
 class SpotDLAdapter:
+    METADATA_TIMEOUT_SECONDS = 120
+    DOWNLOAD_TIMEOUT_SECONDS = 30 * 60
+
     def __init__(self, paths: AppPaths, *, executable: str = "spotdl"):
         self.paths = paths
         self.executable = executable
@@ -80,7 +83,7 @@ class SpotDLAdapter:
             "--print-errors",
         ]
 
-    async def _run(self, command: list[str], config: AppConfig) -> str:
+    async def _run(self, command: list[str], config: AppConfig, *, operation: str, timeout_seconds: float) -> str:
         environment = os.environ.copy()
         if config.spotify_client_id:
             environment["SPOTIPY_CLIENT_ID"] = config.spotify_client_id
@@ -96,12 +99,22 @@ class SpotDLAdapter:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await process.communicate()
         except OSError as exc:
             raise SyncError(f"não foi possível executar spotDL: {redact_text(str(exc))}") from exc
+        LOGGER.info("spotDL %s iniciado (limite=%ss)", operation, int(timeout_seconds))
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds)
+        except asyncio.TimeoutError as exc:
+            process.kill()
+            stdout, stderr = await process.communicate()
+            output = (stdout + b"\n" + stderr).decode("utf-8", errors="replace")
+            LOGGER.error("spotDL %s excedeu o limite de %ss: %s", operation, int(timeout_seconds), redact_text(output[-1_500:]))
+            raise SyncError(f"spotDL excedeu o tempo limite de {int(timeout_seconds)}s na etapa {operation}") from exc
         output = (stdout + b"\n" + stderr).decode("utf-8", errors="replace")
         if process.returncode != 0:
+            LOGGER.error("spotDL %s falhou com código %s: %s", operation, process.returncode, redact_text(output[-1_500:]))
             raise SyncError(f"spotDL falhou com código {process.returncode}: {redact_text(output)}")
+        LOGGER.info("spotDL %s concluído", operation)
         return output
 
     async def fetch_playlist(self, config: AppConfig) -> list[PlaylistEntry]:
@@ -109,7 +122,12 @@ class SpotDLAdapter:
             raise SyncError("configure a URL da playlist antes de sincronizar")
         self.paths.cache.mkdir(parents=True, exist_ok=True)
         save_file = self.paths.cache / "playlist.spotdl"
-        await self._run(self.build_save_command(self.executable, config.playlist_url, save_file), config)
+        await self._run(
+            self.build_save_command(self.executable, config.playlist_url, save_file),
+            config,
+            operation="descoberta da playlist",
+            timeout_seconds=self.METADATA_TIMEOUT_SECONDS,
+        )
         try:
             return parse_spotdl_payload(save_file.read_text(encoding="utf-8"))
         except OSError as exc:
@@ -123,7 +141,12 @@ class SpotDLAdapter:
     async def download(self, config: AppConfig, entries: list[PlaylistEntry]) -> dict[str, Path]:
         self.paths.downloads.mkdir(parents=True, exist_ok=True)
         save_file = self.paths.cache / "playlist.spotdl"
-        await self._run(self.build_sync_command(self.executable, save_file, self.paths.downloads, config.normalization.output_format), config)
+        await self._run(
+            self.build_sync_command(self.executable, save_file, self.paths.downloads, config.normalization.output_format),
+            config,
+            operation="download da playlist",
+            timeout_seconds=self.DOWNLOAD_TIMEOUT_SECONDS,
+        )
         candidates = [path for path in self.paths.downloads.rglob("*") if path.is_file() and path.suffix.casefold().lstrip(".") in {"mp3", "m4a", "ogg", "opus", "flac", "wav"}]
         result: dict[str, Path] = {}
         unused = set(candidates)

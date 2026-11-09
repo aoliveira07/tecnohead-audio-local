@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+
 import pytest
 from conftest import FakeAdapter, FakeLoudness, make_entry
 
@@ -60,4 +62,13 @@ def test_sync_start_rejects_missing_playlist_before_creating_task(paths, config,
 
     with pytest.raises(SyncError, match="configure a URL"):
         service.start()
+
+
+@pytest.mark.asyncio
+async def test_spotdl_timeout_terminates_hung_process(paths, config):
+    adapter = SpotDLAdapter(paths, executable=sys.executable)
+    command = [sys.executable, "-c", "import time; time.sleep(2)"]
+
+    with pytest.raises(SyncError, match="tempo limite"):
+        await adapter._run(command, config, operation="teste", timeout_seconds=0.05)
 
