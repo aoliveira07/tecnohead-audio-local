@@ -393,8 +393,7 @@ class SpotDLAdapter:
         result_file.unlink(missing_ok=True)
         command = [
             sys.executable,
-            "-m",
-            "app.spotdl_bridge",
+            str(Path(__file__).with_name("spotdl_bridge.py")),
             "--input",
             str(input_file),
             "--output-dir",
