@@ -11,7 +11,7 @@ from app.models import ConfigUpdate, CredentialUpdate, TrackStatus, public_confi
 from app.playback import PlaybackError
 from app.runtime import Runtime
 from app.settings import redact_object, redact_text
-from app.sync_service import SyncBusyError
+from app.sync_service import SyncBusyError, SyncError
 
 router = APIRouter(prefix="/api")
 
@@ -35,7 +35,7 @@ def runtime_from(request: Request) -> Runtime:
 def translate_error(exc: Exception) -> HTTPException:
     if isinstance(exc, SyncBusyError):
         return HTTPException(status_code=409, detail="já existe uma sincronização em andamento")
-    if isinstance(exc, (ValueError, PlaybackError)):
+    if isinstance(exc, (ValueError, PlaybackError, SyncError)):
         return HTTPException(status_code=400, detail=redact_text(str(exc)))
     if isinstance(exc, LinkPlayError):
         return HTTPException(status_code=502, detail=redact_text(str(exc)))
@@ -109,7 +109,8 @@ async def library(request: Request, query: str = Query(default="", max_length=20
 @router.post("/sync")
 async def sync_now(request: Request) -> dict[str, Any]:
     try:
-        task = runtime_from(request).sync.start(reason="manual")
+        runtime = runtime_from(request)
+        task = runtime.sync.start(reason="manual")
         return {"accepted": True, "status": "running", "task": task.get_name()}
     except Exception as exc:
         raise translate_error(exc) from exc

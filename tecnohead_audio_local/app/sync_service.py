@@ -196,6 +196,8 @@ class SyncService:
     def start(self, reason: str = "manual") -> asyncio.Task[SyncState]:
         if self._task and not self._task.done():
             raise SyncBusyError("já existe uma sincronização em andamento")
+        if reason != "reprocess" and not self.config.playlist_url:
+            raise SyncError("configure a URL da playlist antes de sincronizar")
         coroutine = self.reprocess() if reason == "reprocess" else self.run(reason)
         self._task = asyncio.create_task(coroutine, name="tecnohead-audio-reprocess" if reason == "reprocess" else "tecnohead-audio-sync")
         return self._task
@@ -271,7 +273,8 @@ class SyncService:
                 state.lock_started_at = None
                 self.state_store.save_sync(state)
                 self.events.append("sync_failed", "sincronização falhou", error=state.error)
-                raise
+                LOGGER.exception("sincronização falhou")
+                return state
             finally:
                 self.lock.release()
 

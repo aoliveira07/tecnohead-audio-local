@@ -4,7 +4,7 @@ App nativo do Home Assistant OS para manter uma biblioteca de áudio local, norm
 
 ## Estado desta entrega
 
-O código está publicado em `https://github.com/aoliveira07/tecnohead-audio-local` na branch `main`. A release `v0.1.1` está publicada e o manifesto GHCR foi construído para `linux/amd64` e `linux/arm64`. O App já foi instalado e iniciado no Home Assistant remoto da Padaria; a sincronização e a reprodução audível ainda dependem da playlist e da URL base de mídia.
+O código está publicado em `https://github.com/aoliveira07/tecnohead-audio-local` na branch `main`. A release `v0.1.2` corrige a sincronização disparada antes do salvamento da playlist, captura falhas do trabalho em segundo plano e será publicada para `linux/amd64` e `linux/arm64`. O App já foi instalado e iniciado no Home Assistant remoto da Padaria; a reprodução audível ainda depende da homologação física dos AudioCast.
 
 O App não altera automações da Padaria Imigrantes e não contém regras de AdGuard, bloqueio de Spotify Connect, AirPlay ou firewall.
 

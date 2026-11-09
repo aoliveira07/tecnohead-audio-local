@@ -118,7 +118,17 @@
 
   async function runDiagnostics() { try { $("#diagnostics-output").textContent = JSON.stringify(await api("diagnostics"), null, 2); } catch (error) { toast(error.message, true); } }
   async function loadLogs() { try { const result = await api("logs?limit=200"); $("#logs-output").innerHTML = (result.items || []).reverse().map((item) => `<div class="event"><div class="event-head"><span class="event-name">${esc(item.event)}</span><span class="event-time">${esc(formatDate(item.at))}</span></div><div class="event-message">${esc(item.message)}</div></div>`).join("") || `<div class="empty-state">Nenhum evento registrado.</div>`; } catch (error) { toast(error.message, true); } }
-  async function triggerSync() { try { await api("sync", { method: "POST", body: "{}" }); toast("Sincronização iniciada."); await refresh(); } catch (error) { toast(error.message, true); } }
+  async function saveSettings({ notify = true } = {}) {
+    const result = await api("config", { method: "PUT", body: JSON.stringify(collectConfig()) });
+    const credentials = collectCredentials();
+    if (Object.keys(credentials).length) await api("credentials", { method: "PUT", body: JSON.stringify(credentials) });
+    state.config = result;
+    $("#settings-message").textContent = "Configurações salvas.";
+    if (notify) toast("Configurações salvas.");
+    await refresh();
+    return result;
+  }
+  async function triggerSync() { try { await saveSettings({ notify: false }); await api("sync", { method: "POST", body: "{}" }); toast("Configurações salvas e sincronização iniciada."); await refresh(); } catch (error) { toast(error.message, true); } }
   async function playbackAction(action) { try { await api("playback/action", { method: "POST", body: JSON.stringify({ action }) }); toast(`Comando ${action} confirmado pela API LinkPlay.`); await refresh(); } catch (error) { toast(error.message, true); } }
   async function testGroup() { try { const result = await api("diagnostics/group", { method: "POST", body: "{}" }); $("#group-state").innerHTML = `<div class="status-line"><strong>Grupo ${result.confirmed ? "confirmado" : "não confirmado"}</strong>${statusPill(result.confirmed ? "ok" : "warning")}</div><div class="muted">Esperados: ${esc((result.expected_hosts || []).join(", "))}</div><div class="muted">Encontrados: ${esc((result.member_hosts || []).join(", ") || "nenhum")}</div>`; } catch (error) { toast(error.message, true); } }
   async function retryTrack(id) { try { await api(`sync/retry/${id}`, { method: "POST", body: "{}" }); toast("Retry da faixa iniciado."); await refresh(); } catch (error) { toast(error.message, true); } }
@@ -137,7 +147,7 @@
   $("#library-status").addEventListener("change", refresh);
   $("#volume-range").addEventListener("input", (event) => { $("#volume-output").textContent = `${event.target.value}%`; });
   $("#volume-range").addEventListener("change", async (event) => { try { await api("playback/volume", { method: "POST", body: JSON.stringify({ volume_percent: Number(event.target.value) }) }); toast("Volume do grupo confirmado."); } catch (error) { toast(error.message, true); } });
-  $("#settings-form").addEventListener("submit", async (event) => { event.preventDefault(); try { const result = await api("config", { method: "PUT", body: JSON.stringify(collectConfig()) }); const credentials = collectCredentials(); if (Object.keys(credentials).length) await api("credentials", { method: "PUT", body: JSON.stringify(credentials) }); state.config = result; $("#settings-message").textContent = "Configurações salvas."; toast("Configurações salvas."); await refresh(); } catch (error) { $("#settings-message").textContent = error.message; toast(error.message, true); } });
+  $("#settings-form").addEventListener("submit", async (event) => { event.preventDefault(); try { await saveSettings(); } catch (error) { $("#settings-message").textContent = error.message; toast(error.message, true); } });
   refresh();
   window.setInterval(refresh, 20000);
 })();

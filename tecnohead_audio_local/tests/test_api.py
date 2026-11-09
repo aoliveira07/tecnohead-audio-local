@@ -31,7 +31,25 @@ async def test_ingress_api_is_relative_and_redacts_config(paths, monkeypatch):
             page = await client.get("/")
             assert page.status_code == 200
             assert "new URL(`api/${path" in (await client.get("/static/app.js")).text
+            assert "await saveSettings({ notify: false })" in (await client.get("/static/app.js")).text
             assert "https://" not in (await client.get("/static/app.js")).text.split("apiUrl")[1].split(";", 1)[0]
+    finally:
+        await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_sync_rejects_missing_playlist_before_background_task(paths, monkeypatch):
+    monkeypatch.setenv("APP_DISABLE_BACKGROUND", "1")
+    runtime = Runtime(paths)
+    runtime.config.playlist_url = ""
+    runtime.config_store.save(runtime.config)
+    app.state.runtime = runtime
+    await runtime.start()
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver/") as client:
+            response = await client.post("/api/sync", json={})
+        assert response.status_code == 400
+        assert response.json()["detail"] == "configure a URL da playlist antes de sincronizar"
     finally:
         await runtime.stop()
 
