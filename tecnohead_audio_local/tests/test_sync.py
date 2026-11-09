@@ -75,6 +75,18 @@ def test_public_fallback_song_row_has_complete_downloader_metadata():
     assert all(row[field] is not None for field in ("genres", "disc_count", "track_number", "album_id", "album_artist"))
 
 
+def test_public_fallback_song_row_uses_direct_search_when_url_is_missing():
+    entry = make_entry(title="Faixa sem URL")
+    row = SpotDLAdapter._fallback_song_row(
+        entry,
+        None,
+        "https://open.spotify.com/playlist/example",
+        1,
+    )
+
+    assert row["download_url"] == f"ytsearch1:{entry.artist} - {entry.title}"
+
+
 def test_persistent_lock_rejects_concurrent(paths):
     first = PersistentSyncLock(paths.lock_file)
     second = PersistentSyncLock(paths.lock_file)

@@ -274,6 +274,10 @@ class SpotDLAdapter:
 
     @staticmethod
     def _fallback_song_row(entry: PlaylistEntry, youtube_url: str | None, playlist_url: str, playlist_length: int) -> dict[str, Any]:
+        download_target = youtube_url
+        if not download_target:
+            query = " - ".join(part for part in (entry.artist, entry.title) if part).strip()
+            download_target = f"ytsearch1:{query}" if query else None
         return {
             "name": entry.title,
             "artists": [entry.artist] if entry.artist else [],
@@ -295,7 +299,10 @@ class SpotDLAdapter:
             "isrc": None,
             "cover_url": None,
             "copyright_text": None,
-            "download_url": youtube_url,
+            # A direct yt-dlp search keeps spotDL from falling back to its
+            # Spotify/YouTube Music API lookup when the pre-resolution step
+            # was rate-limited or returned no URL.
+            "download_url": download_target,
             "lyrics": None,
             "popularity": None,
             # The spotDL downloader reinitializes songs with missing album data.
@@ -378,6 +385,8 @@ class SpotDLAdapter:
                     return entry.entry_id, None
 
         resolved = dict(await asyncio.gather(*(resolve(entry) for entry in entries)))
+        resolved_count = sum(1 for url in resolved.values() if url)
+        LOGGER.info("fallback público do Spotify resolveu %s/%s URLs; demais usam busca direta", resolved_count, len(entries))
         rows = {
             entry.entry_id: self._fallback_song_row(entry, resolved.get(entry.entry_id), config.playlist_url, len(entries))
             for entry in entries
@@ -487,6 +496,10 @@ class SpotDLAdapter:
         finally:
             input_file.unlink(missing_ok=True)
             result_file.unlink(missing_ok=True)
+        bridge_errors = result_payload.get("errors", [])
+        if bridge_errors:
+            for error in bridge_errors[-20:]:
+                LOGGER.warning("spotDL fallback: %s", redact_text(str(error)))
         result: dict[str, Path] = {}
         for item in result_payload.get("results", []):
             if item.get("path") and item.get("song_id"):

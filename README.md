@@ -4,7 +4,7 @@ App nativo do Home Assistant OS para manter uma biblioteca de áudio local, norm
 
 ## Estado desta entrega
 
-O código está publicado em `https://github.com/aoliveira07/tecnohead-audio-local` na branch `main`. A release `v0.1.7` usa o embed público do Spotify para obter a lista completa de faixas no fallback (em vez das 30 linhas inicialmente renderizadas pela página normal), além dos ajustes da `v0.1.6` para manter os metadados completos do downloader; as imagens são publicadas para `linux/amd64` e `linux/arm64`. O App já foi instalado e iniciado no Home Assistant remoto da Padaria; a reprodução audível ainda depende da homologação física dos AudioCast.
+O código está publicado em `https://github.com/aoliveira07/tecnohead-audio-local` na branch `main`. A release `v0.1.8` mantém a leitura completa pelo embed público do Spotify e torna o bridge spotDL resiliente quando a resolução inicial do YouTube é limitada: usa `ytsearch1:` diretamente, reinicia o downloader e repete falhas com backoff, registrando os erros redigidos. As imagens são publicadas para `linux/amd64` e `linux/arm64`. O App já foi instalado e iniciado no Home Assistant remoto da Padaria; a reprodução audível ainda depende da homologação física dos AudioCast.
 
 O App não altera automações da Padaria Imigrantes e não contém regras de AdGuard, bloqueio de Spotify Connect, AirPlay ou firewall.
 
