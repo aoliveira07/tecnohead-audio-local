@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 from app.library import LibraryManager
@@ -54,6 +54,20 @@ class PlaybackSupervisor:
         base_url = self.config.media.base_url.rstrip("/")
         if not base_url:
             raise PlaybackError("configure a URL base de mídia acessível pelos AudioCast")
+        parsed = urlsplit(base_url)
+        if parsed.port is None:
+            # A UI pede somente o host do Home Assistant; o servidor de mídia
+            # fica exposto na porta dedicada e precisa ser explícito para o
+            # AudioCast alcançar o stream pela LAN.
+            base_url = urlunsplit(
+                (
+                    parsed.scheme,
+                    f"{parsed.netloc}:{self.config.media.port}",
+                    parsed.path.rstrip("/"),
+                    "",
+                    "",
+                )
+            )
         return f"{base_url}/stream/{entry_id}?{urlencode({'token': self.config.media.stream_token})}"
 
     def _current_track(self, state: PlaybackState):

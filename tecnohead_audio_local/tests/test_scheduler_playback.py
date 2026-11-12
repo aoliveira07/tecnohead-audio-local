@@ -19,6 +19,18 @@ def test_window_boundaries_are_explicit():
     assert next_sync_at(datetime(2026, 11, 8, 15, 1, tzinfo=zone), AppConfig()).strftime("%H:%M") == "11:00"
 
 
+def test_media_url_adds_dedicated_stream_port_when_host_only():
+    supervisor = PlaybackSupervisor(AppConfig(media={"base_url": "http://192.168.0.20"}), None, None, None, None, None)
+    url = supervisor._media_url("entry-123")
+    assert url.startswith("http://192.168.0.20:18198/stream/entry-123?")
+
+
+def test_media_url_preserves_explicit_stream_port():
+    supervisor = PlaybackSupervisor(AppConfig(media={"base_url": "http://192.168.0.20:18198"}), None, None, None, None, None)
+    url = supervisor._media_url("entry-123")
+    assert url.startswith("http://192.168.0.20:18198/stream/entry-123?")
+
+
 class FakeLinkPlay:
     def __init__(self):
         self.calls = []
