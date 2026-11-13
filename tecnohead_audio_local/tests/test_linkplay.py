@@ -40,6 +40,25 @@ async def test_linkplay_builds_safe_commands_and_confirms_group(config):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("enabled", "shuffle", "expected_mode"),
+    [
+        (True, False, 0),
+        (False, False, 4),
+        (True, True, 2),
+        (False, True, 3),
+    ],
+)
+async def test_linkplay_maps_repeat_modes_without_repeat_one(config, enabled, shuffle, expected_mode):
+    requester = FakeRequester()
+    client = LinkPlayClient(config, requester)
+
+    await client.set_loop("caixa", enabled, shuffle)
+
+    assert requester.commands[-1][1] == f"setPlayerCmd:loopmode:{expected_mode}"
+
+
+@pytest.mark.asyncio
 async def test_linkplay_timeout_is_not_success(config):
     async def fail(*args, **kwargs):
         raise asyncio.TimeoutError()

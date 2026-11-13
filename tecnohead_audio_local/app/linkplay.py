@@ -175,10 +175,15 @@ class LinkPlayClient:
         return await self.command(device_id, f"setPlayerCmd:vol:{volume_percent}")
 
     async def set_loop(self, device_id: str, enabled: bool, shuffle: bool = False) -> Any:
-        # LinkPlay's documented modes are order=0, repeat/continuous=1,
-        # shuffle=2. The supervisor also owns the queue, so read-back remains
-        # the source of truth if a firmware maps the values differently.
-        mode = 2 if shuffle else (1 if enabled else 0)
+        # LinkPlay combines shuffle and repeat in one mode value:
+        # 0 = repeat all, 1 = repeat one, 2 = repeat all + shuffle,
+        # 3 = shuffle without repeat, 4 = sequence without repeat.
+        # In particular, mode 1 must not be used for a playlist: it repeats
+        # the current track indefinitely on AudioCast firmware.
+        if shuffle:
+            mode = 2 if enabled else 3
+        else:
+            mode = 0 if enabled else 4
         return await self.command(device_id, f"setPlayerCmd:loopmode:{mode}")
 
     async def play_url(self, device_id: str, url: str) -> Any:
