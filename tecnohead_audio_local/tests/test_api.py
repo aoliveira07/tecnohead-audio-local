@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import pytest
+from conftest import make_entry
 from httpx import ASGITransport, AsyncClient
 
-from app.main import app
+from app.main import app, media_app
 from app.runtime import Runtime
 
 
@@ -51,6 +52,42 @@ async def test_sync_rejects_missing_playlist_before_background_task(paths, monke
             response = await client.post("/api/sync", json={})
         assert response.status_code == 400
         assert response.json()["detail"] == "configure a URL da playlist antes de sincronizar"
+    finally:
+        await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_media_playlist_endpoint_returns_ready_tracks(paths, monkeypatch):
+    monkeypatch.setenv("APP_DISABLE_BACKGROUND", "1")
+    runtime = Runtime(paths)
+    runtime.config.media.base_url = "http://192.168.0.50"
+    runtime.config_store.save(runtime.config)
+    for position in range(2):
+        entry = make_entry(position, title=f"Faixa {position + 1}")
+        runtime.library.upsert_entry(entry)
+        destination = paths.library / "tracks" / f"{entry.entry_id}.mp3"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"audio")
+        runtime.library.set_ready(
+            entry.entry_id,
+            relative_path=f"tracks/{entry.entry_id}.mp3",
+            file_path=destination,
+            normalization={"mode": "fake", "target_lufs": -18, "true_peak_db": -2, "output_format": "mp3", "completed_at": "now"},
+        )
+    app.state.runtime = runtime
+    media_app.state.runtime = runtime
+    await runtime.start()
+    try:
+        async with AsyncClient(transport=ASGITransport(app=media_app), base_url="http://media.test:18198/") as client:
+            response = await client.get("/playlist.m3u8", params={"token": runtime.config.media.stream_token, "start": runtime.library.ready_tracks()[1].entry_id})
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("audio/x-mpegurl")
+        lines = response.text.splitlines()
+        assert lines[0] == "#EXTM3U"
+        assert lines[1].startswith("#EXTINF:120,Artista - Faixa 2")
+        assert "/stream/" + runtime.library.ready_tracks()[1].entry_id in lines[2]
+        assert "/stream/" + runtime.library.ready_tracks()[0].entry_id in lines[4]
+        assert ":18198/stream/" in response.text
     finally:
         await runtime.stop()
 

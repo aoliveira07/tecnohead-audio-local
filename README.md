@@ -4,7 +4,7 @@ App nativo do Home Assistant OS para manter uma biblioteca de áudio local, norm
 
 ## Estado desta entrega
 
-O código está publicado em `https://github.com/aoliveira07/tecnohead-audio-local` na branch `main`. A release `v0.2.1` corrige a URL do stream enviada ao LinkPlay, acrescentando a porta dedicada 18198 quando o usuário informa somente o host do Home Assistant. A interface segue os parâmetros visuais Smart House do `LG_Local-Thing`, com tema azul-petróleo, cards sólidos, foco acessível e ações responsivas. As imagens são publicadas para `linux/amd64` e `linux/arm64`. O App já foi instalado e iniciado no Home Assistant remoto da Padaria; a reprodução audível ainda depende da homologação física dos AudioCast.
+O código está publicado em `https://github.com/aoliveira07/tecnohead-audio-local` na branch `main`. A release `v0.2.2` envia uma playlist M3U local ao LinkPlay, permitindo que o AudioCast administre a sequência internamente e reduza a pausa entre faixas. A interface segue os parâmetros visuais Smart House do `LG_Local-Thing`, com tema azul-petróleo, cards sólidos, foco acessível e ações responsivas. As imagens são publicadas para `linux/amd64` e `linux/arm64`. O App já foi instalado e iniciado no Home Assistant remoto da Padaria; a reprodução audível ainda depende da homologação física dos AudioCast.
 
 O App não altera automações da Padaria Imigrantes e não contém regras de AdGuard, bloqueio de Spotify Connect, AirPlay ou firewall.
 

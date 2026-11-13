@@ -186,6 +186,11 @@ class LinkPlayClient:
             raise ValueError("URL de mídia inválida")
         return await self.command(device_id, f"setPlayerCmd:play:{url}")
 
+    async def play_m3u(self, device_id: str, url: str) -> Any:
+        if not url.startswith(("http://", "https://")) or any(char in url for char in "\r\n"):
+            raise ValueError("URL de playlist inválida")
+        return await self.command(device_id, f"setPlayerCmd:m3u:play:{url}")
+
     async def pause(self, device_id: str) -> Any:
         return await self.command(device_id, "setPlayerCmd:pause")
 
@@ -258,12 +263,12 @@ class LinkPlayClient:
             results[device_id] = await self.set_volume(device_id, volume_percent)
         return {"ok": True, "volume_percent": volume_percent, "devices": results}
 
-    async def play_group(self, master_id: str, member_ids: list[str], url: str, *, loop: bool, shuffle: bool, volume_percent: int) -> dict[str, Any]:
+    async def play_group(self, master_id: str, member_ids: list[str], url: str, *, loop: bool, shuffle: bool, volume_percent: int, playlist_url: str | None = None) -> dict[str, Any]:
         group = await self.check_group(master_id, member_ids)
         if not group.get("confirmed"):
             group = await self.join_group(master_id, member_ids)
         await self.set_group_volume(master_id, member_ids, volume_percent)
         await self.set_loop(master_id, loop, shuffle)
-        command_result = await self.play_url(master_id, url)
+        command_result = await (self.play_m3u(master_id, playlist_url) if playlist_url else self.play_url(master_id, url))
         return {"ok": True, "confirmed": True, "group": group, "command": command_result}
 

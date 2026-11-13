@@ -35,6 +35,8 @@ async def test_linkplay_builds_safe_commands_and_confirms_group(config):
     assert any(command.startswith("ConnectMasterAp:JoinGroupMaster:eth192.168.0.13") for _, command in requester.commands)
     await client.play_url("caixa", "http://192.168.0.50:18198/stream/abc?token=redacted-token")
     assert any(command.startswith("setPlayerCmd:play:http://") for _, command in requester.commands)
+    await client.play_m3u("caixa", "http://192.168.0.50:18198/playlist.m3u8?token=redacted-token")
+    assert any(command.startswith("setPlayerCmd:m3u:play:http://") for _, command in requester.commands)
 
 
 @pytest.mark.asyncio

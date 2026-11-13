@@ -92,3 +92,21 @@ async def test_supervisor_starts_inside_window(paths, config, library, states):
     assert state.active is True
     assert fake.calls and fake.calls[0][0] == "play_group"
 
+
+@pytest.mark.asyncio
+async def test_supervisor_uses_device_playlist_for_multiple_tracks(paths, config, library, states):
+    entries = [make_entry(0, title="Faixa 1"), make_entry(1, title="Faixa 2")]
+    for entry in entries:
+        library.upsert_entry(entry)
+        destination = paths.library / "tracks" / f"{entry.entry_id}.mp3"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"audio")
+        library.set_ready(entry.entry_id, relative_path=f"tracks/{entry.entry_id}.mp3", file_path=destination, normalization={"mode": "fake", "target_lufs": -18, "true_peak_db": -2, "output_format": "mp3", "completed_at": "now"})
+    fake = FakeLinkPlay()
+    supervisor = PlaybackSupervisor(config, paths, library, fake, states[0], states[1])
+    inside = datetime(2026, 11, 8, 10, 0, tzinfo=ZoneInfo("America/Sao_Paulo"))
+    state = await supervisor.tick(inside)
+    assert state.active is True
+    assert state.playlist_mode is True
+    assert fake.calls[0][2]["playlist_url"].startswith("http://192.168.0.50:18198/playlist.m3u8?")
+

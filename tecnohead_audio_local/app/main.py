@@ -6,10 +6,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
+from app.media import playlist_text
 from app.runtime import Runtime
 from app.web_api import router
 
@@ -78,6 +79,19 @@ async def stream(entry_id: str, request: Request, token: str = Query(min_length=
         raise HTTPException(status_code=404, detail="mídia não encontrada")
     media_types = {".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".ogg": "audio/ogg", ".opus": "audio/ogg", ".flac": "audio/flac", ".wav": "audio/wav"}
     return FileResponse(path, media_type=media_types.get(path.suffix.casefold(), "application/octet-stream"), filename=path.name, content_disposition_type="inline", headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+
+@media_app.get("/playlist.m3u8", include_in_schema=False)
+async def playlist(request: Request, token: str = Query(min_length=32, max_length=128), start: str | None = Query(default=None, max_length=64), shuffle: bool = False) -> PlainTextResponse:
+    runtime = _runtime_for_media(request)
+    if token != runtime.config.media.stream_token:
+        raise HTTPException(status_code=404, detail="playlist não encontrada")
+    tracks = runtime.library.ready_tracks(shuffle=shuffle)
+    return PlainTextResponse(
+        playlist_text(runtime.config, tracks, start_entry_id=start),
+        media_type="audio/x-mpegurl",
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
 
 
 async def serve() -> None:

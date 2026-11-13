@@ -3,11 +3,11 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime
-from urllib.parse import urlencode, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 from app.library import LibraryManager
 from app.linkplay import LinkPlayClient, LinkPlayError
+from app.media import media_url, playlist_url
 from app.models import AppConfig, PlaybackState, TrackStatus
 from app.scheduler import is_within_window
 from app.settings import AppPaths, EventLog, StateStore, redact_text, utc_now
@@ -51,24 +51,16 @@ class PlaybackSupervisor:
         return enabled[0], enabled[1:]
 
     def _media_url(self, entry_id: str) -> str:
-        base_url = self.config.media.base_url.rstrip("/")
-        if not base_url:
-            raise PlaybackError("configure a URL base de mídia acessível pelos AudioCast")
-        parsed = urlsplit(base_url)
-        if parsed.port is None:
-            # A UI pede somente o host do Home Assistant; o servidor de mídia
-            # fica exposto na porta dedicada e precisa ser explícito para o
-            # AudioCast alcançar o stream pela LAN.
-            base_url = urlunsplit(
-                (
-                    parsed.scheme,
-                    f"{parsed.netloc}:{self.config.media.port}",
-                    parsed.path.rstrip("/"),
-                    "",
-                    "",
-                )
-            )
-        return f"{base_url}/stream/{entry_id}?{urlencode({'token': self.config.media.stream_token})}"
+        try:
+            return media_url(self.config, entry_id)
+        except ValueError as exc:
+            raise PlaybackError(str(exc)) from exc
+
+    def _playlist_url(self, start_entry_id: str) -> str:
+        try:
+            return playlist_url(self.config, start_entry_id=start_entry_id, shuffle=self.config.playback.shuffle)
+        except ValueError as exc:
+            raise PlaybackError(str(exc)) from exc
 
     def _current_track(self, state: PlaybackState):
         if state.current_track_id:
@@ -98,6 +90,8 @@ class PlaybackSupervisor:
 
     async def _start_track(self, state: PlaybackState, track, *, reason: str) -> PlaybackState:
         master_id, members = self._device_ids()
+        ready_tracks = self.library.ready_tracks(shuffle=self.config.playback.shuffle)
+        playlist = self._playlist_url(track.entry_id) if len(ready_tracks) > 1 else None
         result = await self.linkplay.play_group(
             master_id,
             members,
@@ -105,8 +99,10 @@ class PlaybackSupervisor:
             loop=self.config.playback.loop,
             shuffle=self.config.playback.shuffle,
             volume_percent=self.config.playback.volume_percent,
+            playlist_url=playlist,
         )
         state.active = True
+        state.playlist_mode = bool(playlist)
         state.current_track_id = track.entry_id
         state.current_position = 0
         state.last_action = f"play:{reason}"
@@ -129,6 +125,7 @@ class PlaybackSupervisor:
                     await self._stop_devices([device.device_id for device in self.config.devices if device.enabled])
                     state.active = False
                     state.group_confirmed = False
+                    state.playlist_mode = False
                     state.last_action = "window_closed"
                     state.last_command_confirmed_at = utc_now()
                     self.events.append("playback_window_closed", "reprodução encerrada fora da janela configurada")
@@ -139,6 +136,7 @@ class PlaybackSupervisor:
             tracks = self.library.ready_tracks(shuffle=False)
             if not tracks:
                 state.active = False
+                state.playlist_mode = False
                 state.last_error = "a biblioteca não possui faixas prontas"
                 self._save(state)
                 return state
@@ -151,9 +149,25 @@ class PlaybackSupervisor:
                 master_id, _members = self._device_ids()
                 master_status = statuses.get(master_id, {})
                 status_value = str(master_status.get("status", "unknown")).casefold()
+                status_title = str(master_status.get("title", "")).strip().casefold()
+                status_artist = str(master_status.get("artist", "")).strip().casefold()
+                if state.playlist_mode and status_title:
+                    matched = next(
+                        (
+                            item
+                            for item in tracks
+                            if item.title.casefold() == status_title and (not status_artist or item.artist.casefold() == status_artist)
+                        ),
+                        None,
+                    )
+                    if matched is None:
+                        matched = next((item for item in tracks if item.title.casefold() == status_title), None)
+                    if matched is not None:
+                        state.current_track_id = matched.entry_id
+                        track = matched
                 duration = track.duration_seconds or 0
                 position = int(master_status.get("position_ms") or 0) / 1000
-                ended = bool(duration and position >= max(0, duration - 2)) or status_value in {"stop", "stopped"}
+                ended = (not state.playlist_mode and bool(duration and position >= max(0, duration - 2))) or status_value in {"stop", "stopped"}
                 expected_devices = {device.device_id for device in self.config.devices if device.enabled}
                 device_degraded = any(not statuses.get(device_id, {}).get("online", False) for device_id in expected_devices)
                 needs_start = not state.active or not state.group_confirmed or state.current_track_id != track.entry_id or status_value in {"unknown", "pause", "paused"} or ended or device_degraded
@@ -187,11 +201,13 @@ class PlaybackSupervisor:
             elif action == "pause":
                 await self.linkplay.pause(master_id)
                 state.active = False
+                state.playlist_mode = False
                 state.last_action = "pause"
                 state.last_command_confirmed_at = utc_now()
             elif action == "stop":
                 await self._stop_devices([master_id, *members])
                 state.active = False
+                state.playlist_mode = False
                 state.last_action = "stop"
                 state.last_command_confirmed_at = utc_now()
             elif action in {"next", "previous"}:
