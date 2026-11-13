@@ -273,7 +273,10 @@ class LinkPlayClient:
         if not group.get("confirmed"):
             group = await self.join_group(master_id, member_ids)
         await self.set_group_volume(master_id, member_ids, volume_percent)
-        await self.set_loop(master_id, loop, shuffle)
         command_result = await (self.play_m3u(master_id, playlist_url) if playlist_url else self.play_url(master_id, url))
+        # Some AudioCast firmware resets the repeat mode when a new M3U is
+        # loaded. Apply it after the source is selected so playlist playback
+        # cannot fall back to repeat-one (mode 1).
+        await self.set_loop(master_id, loop, shuffle)
         return {"ok": True, "confirmed": True, "group": group, "command": command_result}
 

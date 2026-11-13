@@ -40,6 +40,26 @@ async def test_linkplay_builds_safe_commands_and_confirms_group(config):
 
 
 @pytest.mark.asyncio
+async def test_linkplay_applies_repeat_mode_after_loading_playlist(config):
+    requester = FakeRequester()
+    client = LinkPlayClient(config, requester)
+
+    await client.play_group(
+        "caixa",
+        ["restaurante"],
+        "http://192.168.0.50:18198/stream/first?token=redacted-token",
+        loop=True,
+        shuffle=False,
+        volume_percent=90,
+        playlist_url="http://192.168.0.50:18198/playlist.m3u8?token=redacted-token",
+    )
+
+    commands = [command for _, command in requester.commands]
+    assert commands[-2].startswith("setPlayerCmd:m3u:play:http://")
+    assert commands[-1] == "setPlayerCmd:loopmode:0"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("enabled", "shuffle", "expected_mode"),
     [
