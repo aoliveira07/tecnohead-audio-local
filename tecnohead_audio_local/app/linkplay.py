@@ -332,6 +332,66 @@ class LinkPlayClient:
             "devices": results,
         }
 
+    async def set_individual_volumes(self, device_ids: list[str], volume_percent: int) -> dict[str, Any]:
+        """Apply each zone's effective volume without using WMRM guests."""
+
+        targets = {
+            device_id: min(volume_percent, self._device(device_id).volume_percent)
+            for device_id in device_ids
+        }
+        results: dict[str, Any] = {}
+        for device_id, target in targets.items():
+            results[device_id] = await self.set_volume(device_id, target)
+        return {
+            "ok": True,
+            "requested_volume_percent": volume_percent,
+            "device_volumes": targets,
+            "devices": results,
+        }
+
+    async def play_individual(
+        self,
+        device_ids: list[str],
+        url: str,
+        *,
+        loop: bool,
+        shuffle: bool,
+        volume_percent: int,
+        playlist_url: str | None = None,
+    ) -> dict[str, Any]:
+        """Start the same source on each AudioCast as a standalone player.
+
+        The master is explicitly ungrouped first so a previous WMRM session
+        cannot silently redirect commands sent to the individual zones.
+        """
+
+        if not device_ids:
+            raise LinkPlayError("nenhum AudioCast habilitado para reprodução individual")
+        await self.ungroup(device_ids[0])
+        results: dict[str, Any] = {}
+        targets = {
+            device_id: min(volume_percent, self._device(device_id).volume_percent)
+            for device_id in device_ids
+        }
+        for device_id in device_ids:
+            source_result = await (self.play_m3u(device_id, playlist_url) if playlist_url else self.play_url(device_id, url))
+            loop_result = await self.set_loop(device_id, loop, shuffle)
+            volume_result = await self.set_volume(device_id, targets[device_id])
+            status_result = await self.status(device_id)
+            results[device_id] = {
+                "source": source_result,
+                "loop": loop_result,
+                "volume": volume_result,
+                "status": status_result,
+            }
+        return {
+            "ok": True,
+            "mode": "individual",
+            "confirmed": True,
+            "device_volumes": targets,
+            "devices": results,
+        }
+
     async def play_group(self, master_id: str, member_ids: list[str], url: str, *, loop: bool, shuffle: bool, volume_percent: int, playlist_url: str | None = None) -> dict[str, Any]:
         group = await self.check_group(master_id, member_ids)
         if not group.get("confirmed"):

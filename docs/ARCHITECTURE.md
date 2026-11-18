@@ -8,6 +8,11 @@ Ingress 18199 ── FastAPI ── Runtime ──┬─ ConfigStore / StateStor
                                       └─ Diagnostics / EventLog
 
 AudioCast ──LAN HTTP 18198── media_app ── arquivo normalizado
+
+No modo individual, cada AudioCast recebe a mesma playlist M3U e busca os
+arquivos diretamente no `media_app`; isso evita que a reprodução dependa do
+transporte WMRM entre master e convidados. O modo agrupado LinkPlay permanece
+disponível para redes e firmwares que suportem esse transporte com estabilidade.
 ```
 
 ## Persistência

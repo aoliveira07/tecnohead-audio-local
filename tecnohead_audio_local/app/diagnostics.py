@@ -77,10 +77,14 @@ class DiagnosticsService:
                 f"Os AudioCast estão com firmwares diferentes ({firmware_label}); isso pode afetar a fluidez do multiroom e deve ser considerado na homologação física."
             )
         if enabled:
-            try:
-                group = await self.linkplay.check_group(enabled[0], enabled[1:])
-            except Exception as exc:
-                group = {"confirmed": False, "error": str(exc)}
+            if self.config.playback.playback_mode == "individual":
+                group = {"mode": "individual", "required": False, "confirmed": False, "reason": "o modo individual não usa agrupamento LinkPlay"}
+                notes.append("A reprodução está no modo individual: cada AudioCast recebe a mesma playlist diretamente e não depende do transporte de convidados WMRM.")
+            else:
+                try:
+                    group = await self.linkplay.check_group(enabled[0], enabled[1:])
+                except Exception as exc:
+                    group = {"mode": "group", "required": True, "confirmed": False, "error": str(exc)}
         payload = {
             "app": {"state": "ok", "version": __import__("app").__version__},
             "configuration": public_config(self.config),

@@ -160,6 +160,10 @@ class PlaybackConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = True
+    # Individual playback avoids relying on the AudioCast WMRM guest
+    # transport.  The grouped LinkPlay mode remains available for sites where
+    # the devices share a stable peer-to-peer network.
+    playback_mode: str = Field(default="individual", pattern="^(group|individual)$")
     window_start: str = "05:30"
     window_end: str = "21:30"
     loop: bool = True
@@ -383,6 +387,7 @@ class PlaybackState(BaseModel):
     last_success_at: str | None = None
     last_error: str | None = None
     failure_count: int = 0
+    playback_mode: str | None = None
     group_confirmed: bool = False
     group_device_ids: list[str] = Field(default_factory=list)
     playlist_mode: bool = False

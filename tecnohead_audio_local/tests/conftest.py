@@ -20,7 +20,7 @@ def paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AppPaths:
 
 @pytest.fixture
 def config() -> AppConfig:
-    return AppConfig(media={"base_url": "http://192.168.0.50:18198", "port": 18198})
+    return AppConfig(media={"base_url": "http://192.168.0.50:18198", "port": 18198}, playback={"playback_mode": "group"})
 
 
 @pytest.fixture

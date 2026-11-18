@@ -45,7 +45,7 @@
     $("#overview-cards").innerHTML = [
       ["Faixas prontas", library.ready || 0, "disponíveis offline"],
       ["Biblioteca", library.total || 0, `${library.ready || 0} prontas`],
-      ["Volume", `${state.config?.playback?.volume_percent ?? 90}%`, "alvo do grupo"],
+      ["Volume", `${state.config?.playback?.volume_percent ?? 90}%`, state.config?.playback?.playback_mode === "individual" ? "alvo por zona" : "alvo do grupo"],
       ["Supervisão", playback.supervised ? "Ativa" : "Pausada", playback.last_success_at ? `último sucesso ${formatDate(playback.last_success_at)}` : "sem confirmação"],
     ].map(([label, value, note]) => `<div class="metric"><div class="metric-label">${esc(label)}</div><div class="metric-value">${esc(value)}</div><div class="metric-note">${esc(note)}</div></div>`).join("");
     $("#current-track").innerHTML = trackLabel(snapshot.current_track);
@@ -96,6 +96,7 @@
     mqttState.className = `status-pill ${config.mqtt?.enabled === false ? "neutral" : "ok"}`;
     $("#window-start").value = config.playback?.window_start || "05:30";
     $("#window-end").value = config.playback?.window_end || "21:30";
+    $("#playback-mode").value = config.playback?.playback_mode || "individual";
     $("#playback-volume").value = config.playback?.volume_percent ?? 90;
     $("#playback-enabled").checked = config.playback?.enabled !== false;
     $("#loop-enabled").checked = config.playback?.loop !== false;
@@ -115,7 +116,7 @@
     const current = state.config || {};
     const devices = (current.devices || []).map((device) => ({ ...device, name: $(`.device-name[data-device="${CSS.escape(device.device_id)}"]`).value.trim() || device.name, host: $(`.device-host[data-device="${CSS.escape(device.device_id)}"]`).value.trim(), port: Number($(`.device-port[data-device="${CSS.escape(device.device_id)}"]`).value), volume_percent: Number($(`.device-volume[data-device="${CSS.escape(device.device_id)}"]`).value), enabled: $(`.device-enabled[data-device="${CSS.escape(device.device_id)}"]`).checked }));
     const times = [...document.querySelectorAll("[data-sync-time]")].map((input) => input.value.trim()).filter(Boolean);
-    return { timezone: $("#timezone").value.trim(), playlist_url: $("#playlist-url").value.trim(), sync: { ...current.sync, enabled: $("#sync-enabled").checked, times }, playback: { ...current.playback, enabled: $("#playback-enabled").checked, window_start: $("#window-start").value, window_end: $("#window-end").value, volume_percent: Number($("#playback-volume").value), loop: $("#loop-enabled").checked, shuffle: $("#shuffle-enabled").checked }, normalization: { ...current.normalization, enabled: true, target_lufs: Number($("#target-lufs").value), true_peak_db: Number($("#true-peak").value) }, linkplay: current.linkplay, media: { base_url: $("#media-base-url").value.trim(), port: Number($("#media-port").value) }, mqtt: { enabled: $("#mqtt-enabled").checked, host: $("#mqtt-host").value.trim(), port: Number($("#mqtt-port").value), username: $("#mqtt-username").value.trim(), discovery_prefix: $("#mqtt-discovery-prefix").value.trim(), topic_prefix: $("#mqtt-topic-prefix").value.trim() }, devices };
+    return { timezone: $("#timezone").value.trim(), playlist_url: $("#playlist-url").value.trim(), sync: { ...current.sync, enabled: $("#sync-enabled").checked, times }, playback: { ...current.playback, playback_mode: $("#playback-mode").value, enabled: $("#playback-enabled").checked, window_start: $("#window-start").value, window_end: $("#window-end").value, volume_percent: Number($("#playback-volume").value), loop: $("#loop-enabled").checked, shuffle: $("#shuffle-enabled").checked }, normalization: { ...current.normalization, enabled: true, target_lufs: Number($("#target-lufs").value), true_peak_db: Number($("#true-peak").value) }, linkplay: current.linkplay, media: { base_url: $("#media-base-url").value.trim(), port: Number($("#media-port").value) }, mqtt: { enabled: $("#mqtt-enabled").checked, host: $("#mqtt-host").value.trim(), port: Number($("#mqtt-port").value), username: $("#mqtt-username").value.trim(), discovery_prefix: $("#mqtt-discovery-prefix").value.trim(), topic_prefix: $("#mqtt-topic-prefix").value.trim() }, devices };
   }
 
   function addDevice() {
@@ -161,7 +162,7 @@
   }
   async function triggerSync() { try { await saveSettings({ notify: false }); await api("sync", { method: "POST", body: "{}" }); toast("Configurações salvas e sincronização iniciada."); await refresh(); } catch (error) { toast(error.message, true); } }
   async function playbackAction(action) { try { await api("playback/action", { method: "POST", body: JSON.stringify({ action }) }); toast(`Comando ${action} confirmado pela API LinkPlay.`); await refresh(); } catch (error) { toast(error.message, true); } }
-  async function testGroup() { try { const result = await api("diagnostics/group", { method: "POST", body: "{}" }); $("#group-state").innerHTML = `<div class="status-line"><strong>Grupo ${result.confirmed ? "confirmado" : "não confirmado"}</strong>${statusPill(result.confirmed ? "ok" : "warning")}</div><div class="muted">Esperados: ${esc((result.expected_hosts || []).join(", "))}</div><div class="muted">Encontrados: ${esc((result.member_hosts || []).join(", ") || "nenhum")}</div>`; } catch (error) { toast(error.message, true); } }
+  async function testGroup() { try { const result = await api("diagnostics/group", { method: "POST", body: "{}" }); if (result.mode === "individual") { $("#group-state").innerHTML = `<div class="status-line"><strong>Modo individual ativo</strong>${statusPill("ok")}</div><div class="muted">O agrupamento LinkPlay não é utilizado.</div>`; return; } $("#group-state").innerHTML = `<div class="status-line"><strong>Grupo ${result.confirmed ? "confirmado" : "não confirmado"}</strong>${statusPill(result.confirmed ? "ok" : "warning")}</div><div class="muted">Esperados: ${esc((result.expected_hosts || []).join(", "))}</div><div class="muted">Encontrados: ${esc((result.member_hosts || []).join(", ") || "nenhum")}</div>`; } catch (error) { toast(error.message, true); } }
   async function retryTrack(id) { try { await api(`sync/retry/${id}`, { method: "POST", body: "{}" }); toast("Retry da faixa iniciado."); await refresh(); } catch (error) { toast(error.message, true); } }
 
   function formatBytes(value) { const number = Number(value || 0); if (number < 1024) return `${number} B`; const units = ["KB", "MB", "GB", "TB"]; let size = number / 1024; let unit = units[0]; for (let index = 0; size >= 1024 && index < units.length - 1; index += 1) { size /= 1024; unit = units[index + 1]; } return `${size.toFixed(size >= 10 ? 0 : 1)} ${unit}`; }
@@ -179,7 +180,7 @@
   $("#library-search").addEventListener("input", () => { window.clearTimeout(refresh.libraryTimer); refresh.libraryTimer = window.setTimeout(refresh, 250); });
   $("#library-status").addEventListener("change", refresh);
   $("#volume-range").addEventListener("input", (event) => { $("#volume-output").textContent = `${event.target.value}%`; });
-  $("#volume-range").addEventListener("change", async (event) => { try { await api("playback/volume", { method: "POST", body: JSON.stringify({ volume_percent: Number(event.target.value) }) }); toast("Volume do grupo confirmado."); } catch (error) { toast(error.message, true); } });
+  $("#volume-range").addEventListener("change", async (event) => { try { await api("playback/volume", { method: "POST", body: JSON.stringify({ volume_percent: Number(event.target.value) }) }); toast("Volumes por zona confirmados."); } catch (error) { toast(error.message, true); } });
   $("#settings-form").addEventListener("submit", async (event) => { event.preventDefault(); try { await saveSettings(); } catch (error) { $("#settings-message").textContent = error.message; toast(error.message, true); } });
   $("#add-sync-time").addEventListener("click", () => { const values = [...document.querySelectorAll("[data-sync-time]")].map((input) => input.value).filter(Boolean); if (values.length >= 8) return toast("A agenda aceita no máximo 8 horários.", true); values.push("18:00"); renderSyncTimes(values); });
   $("#timezone").addEventListener("change", () => { const values = [...document.querySelectorAll("[data-sync-time]")].map((input) => input.value).filter(Boolean); renderSyncTimes(values); });

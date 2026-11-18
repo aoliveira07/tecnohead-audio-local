@@ -8,7 +8,7 @@ Não coloque tokens no repositório, no `config.yaml`, em issues ou em capturas 
 
 ## Zonas AudioCast
 
-O grupo multiroom aceita de 1 a 8 dispositivos LinkPlay habilitados. A primeira zona habilitada permanece como master e todas as demais entram no mesmo grupo e reproduzem a playlist local. O volume global é o alvo do master; cada zona recebe `min(alvo global, volume da zona)`, permitindo, por exemplo, Caixa/Restaurante em 90% e Varanda em 60%. Em upgrades, a zona `Varanda` é adicionada desabilitada para preservar o grupo existente; informe o IP ou DNS correto na aba **Configurações**, salve e só então marque **Habilitado**. O aplicativo não presume o endereço da Varanda.
+O App aceita de 1 a 8 dispositivos LinkPlay habilitados. O modo **Individual** (padrão) envia a mesma playlist diretamente para cada zona, evitando depender do transporte WMRM de convidados; cada zona recebe `min(alvo global, volume da zona)`, permitindo, por exemplo, Caixa/Restaurante em 90% e Varanda em 50%. O modo **Grupo LinkPlay** continua disponível na aba **Configurações** para redes onde o multiroom do firmware é estável. Em upgrades, a zona `Varanda` é adicionada desabilitada; informe o IP ou DNS correto, salve e só então marque **Habilitado**.
 
 O botão **Adicionar AudioCast** permite cadastrar outras zonas. Cada nova zona começa desabilitada, sem qualquer tentativa de conexão, até que um host válido seja informado e a configuração seja salva.
 

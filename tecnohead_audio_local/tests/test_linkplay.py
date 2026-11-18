@@ -113,6 +113,33 @@ async def test_linkplay_applies_repeat_mode_after_loading_playlist(config):
 
 
 @pytest.mark.asyncio
+async def test_linkplay_can_start_same_playlist_on_each_zone(config):
+    config.devices[2].enabled = True
+    config.devices[2].host = "192.168.0.15"
+    config.devices[2].volume_percent = 50
+    requester = FakeRequester()
+    client = LinkPlayClient(config, requester)
+
+    result = await client.play_individual(
+        ["caixa", "restaurante", "varanda"],
+        "http://192.168.0.50:18198/stream/first?token=redacted-token",
+        loop=True,
+        shuffle=False,
+        volume_percent=90,
+        playlist_url="http://192.168.0.50:18198/playlist.m3u8?token=redacted-token",
+    )
+
+    assert result["confirmed"] is True
+    commands = [command for _, command in requester.commands]
+    assert commands[0] == "multiroom:Ungroup"
+    assert commands.count("setPlayerCmd:m3u:play:http://192.168.0.50:18198/playlist.m3u8?token=redacted-token") == 3
+    assert commands.count("setPlayerCmd:loopmode:0") == 3
+    assert "setPlayerCmd:vol:90" in commands
+    assert "setPlayerCmd:vol:50" in commands
+    assert not any(command.startswith("multiroom:SlaveVolume:") for command in commands)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("enabled", "shuffle", "expected_mode"),
     [

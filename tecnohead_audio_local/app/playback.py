@@ -31,8 +31,16 @@ class PlaybackSupervisor:
         self._lock = asyncio.Lock()
 
     def update_config(self, config: AppConfig) -> None:
+        mode_changed = self.config.playback.playback_mode != config.playback.playback_mode
         self.config = config
         self.linkplay.update_config(config)
+        if mode_changed:
+            state = self.state()
+            state.active = False
+            state.group_confirmed = False
+            state.group_device_ids = []
+            self._save(state)
+            self.events.append("playback_mode_changed", "modo de transporte alterado; próxima reprodução será reiniciada", playback_mode=config.playback.playback_mode)
 
     def invalidate_group(self) -> None:
         state = self.state()
@@ -55,6 +63,9 @@ class PlaybackSupervisor:
         if not enabled:
             raise PlaybackError("nenhum AudioCast está habilitado")
         return enabled[0], enabled[1:]
+
+    def _individual_mode(self) -> bool:
+        return self.config.playback.playback_mode == "individual"
 
     def _desired_volumes(self, volume_percent: int | None = None) -> dict[str, int]:
         requested = self.config.playback.volume_percent if volume_percent is None else volume_percent
@@ -104,17 +115,30 @@ class PlaybackSupervisor:
 
     async def _start_track(self, state: PlaybackState, track, *, reason: str) -> PlaybackState:
         master_id, members = self._device_ids()
+        device_ids = [master_id, *members]
         ready_tracks = self.library.ready_tracks(shuffle=self.config.playback.shuffle)
         playlist = self._playlist_url(track.entry_id) if len(ready_tracks) > 1 else None
-        result = await self.linkplay.play_group(
-            master_id,
-            members,
-            self._media_url(track.entry_id),
-            loop=self.config.playback.loop,
-            shuffle=self.config.playback.shuffle,
-            volume_percent=self.config.playback.volume_percent,
-            playlist_url=playlist,
-        )
+        if self._individual_mode():
+            result = await self.linkplay.play_individual(
+                device_ids,
+                self._media_url(track.entry_id),
+                loop=self.config.playback.loop,
+                shuffle=self.config.playback.shuffle,
+                volume_percent=self.config.playback.volume_percent,
+                playlist_url=playlist,
+            )
+            started_message = "faixa enviada individualmente aos AudioCast"
+        else:
+            result = await self.linkplay.play_group(
+                master_id,
+                members,
+                self._media_url(track.entry_id),
+                loop=self.config.playback.loop,
+                shuffle=self.config.playback.shuffle,
+                volume_percent=self.config.playback.volume_percent,
+                playlist_url=playlist,
+            )
+            started_message = "faixa enviada ao grupo LinkPlay"
         state.active = True
         state.playlist_mode = bool(playlist)
         state.current_track_id = track.entry_id
@@ -124,9 +148,17 @@ class PlaybackSupervisor:
         state.last_success_at = utc_now()
         state.last_error = None
         state.failure_count = 0
-        state.group_confirmed = bool(result.get("confirmed"))
-        state.group_device_ids = [master_id, *members]
-        self.events.append("playback_started", "faixa enviada ao grupo LinkPlay", entry_id=track.entry_id, reason=reason, group_confirmed=state.group_confirmed)
+        state.playback_mode = self.config.playback.playback_mode
+        state.group_confirmed = False if self._individual_mode() else bool(result.get("confirmed"))
+        state.group_device_ids = [] if self._individual_mode() else [master_id, *members]
+        self.events.append(
+            "playback_started",
+            started_message,
+            entry_id=track.entry_id,
+            reason=reason,
+            playback_mode=self.config.playback.playback_mode,
+            group_confirmed=state.group_confirmed,
+        )
         return state
 
     async def tick(self, moment: datetime | None = None) -> PlaybackState:
@@ -187,8 +219,20 @@ class PlaybackSupervisor:
                 expected_devices = {device.device_id for device in self.config.devices if device.enabled}
                 device_degraded = any(not statuses.get(device_id, {}).get("online", False) for device_id in expected_devices)
                 expected_group = [device.device_id for device in self.config.devices if device.enabled]
-                group_topology_changed = state.group_device_ids != expected_group
-                needs_start = not state.active or not state.group_confirmed or group_topology_changed or state.current_track_id != track.entry_id or status_value in {"unknown", "pause", "paused"} or ended or device_degraded
+                if self._individual_mode():
+                    state.group_confirmed = False
+                    state.group_device_ids = []
+                    individual_degraded = any(
+                        str(statuses.get(device_id, {}).get("status", "unknown")).casefold()
+                        in {"unknown", "stop", "stopped", "pause", "paused"}
+                        for device_id in expected_devices
+                    )
+                    group_topology_changed = False
+                    needs_start = not state.active or state.current_track_id != track.entry_id or status_value in {"unknown", "pause", "paused"} or ended or device_degraded or individual_degraded
+                else:
+                    group_topology_changed = state.group_device_ids != expected_group
+                    needs_start = not state.active or not state.group_confirmed or group_topology_changed or state.current_track_id != track.entry_id or status_value in {"unknown", "pause", "paused"} or ended or device_degraded
+                needs_start = needs_start or state.playback_mode != self.config.playback.playback_mode
                 if ended and state.current_track_id == track.entry_id and len(tracks) > 1:
                     track = self._next_track(state) or track
                 if needs_start:
@@ -201,7 +245,10 @@ class PlaybackSupervisor:
                         for device_id, target in desired_volumes.items()
                     )
                     if volume_drift:
-                        await self.linkplay.set_group_volume(master_id, _members, self.config.playback.volume_percent)
+                        if self._individual_mode():
+                            await self.linkplay.set_individual_volumes([master_id, *_members], self.config.playback.volume_percent)
+                        else:
+                            await self.linkplay.set_group_volume(master_id, _members, self.config.playback.volume_percent)
                         self.events.append("playback_volume_reapplied", "volumes por zona reaplicados após leitura diferente do alvo")
                     state.current_position = int(master_status.get("position_ms") or 0)
                     state.last_error = None
@@ -226,7 +273,11 @@ class PlaybackSupervisor:
                     raise PlaybackError("a biblioteca não possui faixas prontas")
                 state = await self._start_track(state, track, reason="manual")
             elif action == "pause":
-                await self.linkplay.pause(master_id)
+                if self._individual_mode():
+                    for device_id in [master_id, *members]:
+                        await self.linkplay.pause(device_id)
+                else:
+                    await self.linkplay.pause(master_id)
                 state.active = False
                 state.group_device_ids = []
                 state.playlist_mode = False
@@ -258,7 +309,10 @@ class PlaybackSupervisor:
         if not 0 <= volume_percent <= 100:
             raise PlaybackError("volume deve estar entre 0 e 100")
         master_id, members = self._device_ids()
-        await self.linkplay.set_group_volume(master_id, members, volume_percent)
+        if self._individual_mode():
+            await self.linkplay.set_individual_volumes([master_id, *members], volume_percent)
+        else:
+            await self.linkplay.set_group_volume(master_id, members, volume_percent)
         state = self.state()
         state.last_action = f"volume:{volume_percent}"
         state.last_command_confirmed_at = utc_now()
@@ -270,6 +324,8 @@ class PlaybackSupervisor:
         return {"status": await self.linkplay.status(device_id), "identity": await self.linkplay.identity(device_id)}
 
     async def test_group(self) -> dict:
+        if self._individual_mode():
+            return {"mode": "individual", "required": False, "confirmed": False, "reason": "o modo individual não usa agrupamento LinkPlay"}
         master_id, members = self._device_ids()
         return await self.linkplay.check_group(master_id, members)
 

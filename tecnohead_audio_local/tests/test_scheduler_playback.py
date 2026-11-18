@@ -57,6 +57,10 @@ class FakeLinkPlay:
         self.calls.append(("play_group", args, kwargs))
         return {"confirmed": True}
 
+    async def play_individual(self, *args, **kwargs):
+        self.calls.append(("play_individual", args, kwargs))
+        return {"confirmed": True}
+
     async def stop(self, device_id):
         self.calls.append(("stop", device_id))
 
@@ -65,6 +69,9 @@ class FakeLinkPlay:
 
     async def set_group_volume(self, *args):
         self.calls.append(("volume", args))
+
+    async def set_individual_volumes(self, *args):
+        self.calls.append(("individual_volume", args))
 
     async def status(self, device_id):
         return {"device_id": device_id, "online": True}
@@ -134,6 +141,7 @@ async def test_supervisor_includes_third_enabled_audiocast_in_group(paths, libra
         library.set_ready(entry.entry_id, relative_path=f"tracks/{entry.entry_id}.mp3", file_path=destination, normalization={"mode": "fake", "target_lufs": -18, "true_peak_db": -2, "output_format": "mp3", "completed_at": "now"})
     config = AppConfig(
         media={"base_url": "http://192.168.0.50:18198", "port": 18198},
+        playback={"playback_mode": "group"},
         devices=[
             DeviceConfig(device_id="caixa", name="Caixa", host="192.168.0.13"),
             DeviceConfig(device_id="restaurante", name="Restaurante", host="192.168.0.14"),
@@ -148,4 +156,34 @@ async def test_supervisor_includes_third_enabled_audiocast_in_group(paths, libra
     assert state.active is True
     assert fake.calls[0][1][0] == "caixa"
     assert fake.calls[0][1][1] == ["restaurante", "varanda"]
+
+
+@pytest.mark.asyncio
+async def test_supervisor_can_start_same_playlist_individually(paths, library, states):
+    entries = [make_entry(0, title="Faixa 1"), make_entry(1, title="Faixa 2")]
+    for entry in entries:
+        library.upsert_entry(entry)
+        destination = paths.library / "tracks" / f"{entry.entry_id}.mp3"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"audio")
+        library.set_ready(entry.entry_id, relative_path=f"tracks/{entry.entry_id}.mp3", file_path=destination, normalization={"mode": "fake", "target_lufs": -18, "true_peak_db": -2, "output_format": "mp3", "completed_at": "now"})
+    config = AppConfig(
+        media={"base_url": "http://192.168.0.50:18198", "port": 18198},
+        playback={"playback_mode": "individual"},
+        devices=[
+            DeviceConfig(device_id="caixa", name="Caixa", host="192.168.0.13", volume_percent=90),
+            DeviceConfig(device_id="restaurante", name="Restaurante", host="192.168.0.14", volume_percent=90),
+            DeviceConfig(device_id="varanda", name="Varanda", host="192.168.0.15", volume_percent=50),
+        ],
+    )
+    fake = FakeLinkPlay()
+    supervisor = PlaybackSupervisor(config, paths, library, fake, states[0], states[1])
+
+    state = await supervisor.tick(datetime(2026, 11, 8, 10, 0, tzinfo=ZoneInfo("America/Sao_Paulo")))
+
+    assert state.active is True
+    assert state.group_confirmed is False
+    assert state.group_device_ids == []
+    assert fake.calls[0][0] == "play_individual"
+    assert fake.calls[0][1][0] == ["caixa", "restaurante", "varanda"]
 

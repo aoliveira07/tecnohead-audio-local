@@ -17,6 +17,13 @@ mestre usa `setPlayerCmd:slave_vol`; o volume de cada convidado usa
 `multiroom:SlaveVolume:<guest_ip>:<volume>`. Assim, o alvo global pode ser 90%
 com uma zona limitada a 60%, sem reduzir as outras zonas.
 
+Quando a configuração está em `playback_mode=individual`, o App envia a mesma
+playlist M3U a cada AudioCast, aplica `setPlayerCmd:loopmode` e
+`setPlayerCmd:vol` individualmente, e desfaz um agrupamento anterior no master.
+Nesse modo, a continuidade deixa de depender do transporte de áudio WMRM entre
+os dispositivos; a sincronização entre zonas fica sujeita ao tempo de cada
+AudioCast para abrir a mesma URL.
+
 Esses comandos são uma hipótese configurável baseada na API LinkPlay pública e na integração LinkPlay do Home Assistant. Firmware presente nos AudioCast pode usar semântica ou transporte diferente, inclusive HTTPS. O App não registra tokens em URL de logs e não informa sucesso quando há timeout ou quando o read-back do grupo não confirma o membro.
 
 ## Teste físico pendente
