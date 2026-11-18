@@ -104,14 +104,32 @@
     $("#volume-output").textContent = `${$("#volume-range").value}%`;
     $("#media-base-url").value = config.media?.base_url || "";
     $("#media-port").value = config.media?.port || 18198;
-    $("#device-settings").innerHTML = (config.devices || []).map((device) => `<div class="device-setting"><h3>${esc(device.name)}</h3><div class="form-grid"><label>Host<input class="input device-host" data-device="${esc(device.device_id)}" value="${esc(device.host)}" /></label><label>Porta<input class="input device-port" data-device="${esc(device.device_id)}" type="number" min="1" max="65535" value="${esc(device.port)}" /></label><label>Volume máximo (%)<input class="input device-volume" data-device="${esc(device.device_id)}" type="number" min="0" max="100" value="${esc(device.volume_percent)}" /></label><label class="check-label"><input class="device-enabled" data-device="${esc(device.device_id)}" type="checkbox" ${device.enabled !== false ? "checked" : ""} /> Habilitado</label></div></div>`).join("");
+    $("#device-settings").innerHTML = (config.devices || []).map((device) => {
+      const deviceId = esc(device.device_id);
+      const enabled = device.enabled !== false;
+      return `<div class="device-setting"><div class="section-heading compact"><h3>${esc(device.name)}</h3><span class="status-pill ${enabled ? "ok" : "neutral"}">${enabled ? "Habilitado" : "Aguardando IP"}</span></div><div class="form-grid"><label>Nome<input class="input device-name" data-device="${deviceId}" value="${esc(device.name)}" /></label><label>IP ou DNS<input class="input device-host" data-device="${deviceId}" placeholder="192.168.0.x" value="${esc(device.host)}" /></label><label>Porta<input class="input device-port" data-device="${deviceId}" type="number" min="1" max="65535" value="${esc(device.port)}" /></label><label>Volume máximo (%)<input class="input device-volume" data-device="${deviceId}" type="number" min="0" max="100" value="${esc(device.volume_percent)}" /></label><label class="check-label"><input class="device-enabled" data-device="${deviceId}" type="checkbox" ${enabled ? "checked" : ""} /> Habilitado</label></div></div>`;
+    }).join("");
   }
 
   function collectConfig() {
     const current = state.config || {};
-    const devices = (current.devices || []).map((device) => ({ ...device, host: $(`.device-host[data-device="${CSS.escape(device.device_id)}"]`).value.trim(), port: Number($(`.device-port[data-device="${CSS.escape(device.device_id)}"]`).value), volume_percent: Number($(`.device-volume[data-device="${CSS.escape(device.device_id)}"]`).value), enabled: $(`.device-enabled[data-device="${CSS.escape(device.device_id)}"]`).checked }));
+    const devices = (current.devices || []).map((device) => ({ ...device, name: $(`.device-name[data-device="${CSS.escape(device.device_id)}"]`).value.trim() || device.name, host: $(`.device-host[data-device="${CSS.escape(device.device_id)}"]`).value.trim(), port: Number($(`.device-port[data-device="${CSS.escape(device.device_id)}"]`).value), volume_percent: Number($(`.device-volume[data-device="${CSS.escape(device.device_id)}"]`).value), enabled: $(`.device-enabled[data-device="${CSS.escape(device.device_id)}"]`).checked }));
     const times = [...document.querySelectorAll("[data-sync-time]")].map((input) => input.value.trim()).filter(Boolean);
     return { timezone: $("#timezone").value.trim(), playlist_url: $("#playlist-url").value.trim(), sync: { ...current.sync, enabled: $("#sync-enabled").checked, times }, playback: { ...current.playback, enabled: $("#playback-enabled").checked, window_start: $("#window-start").value, window_end: $("#window-end").value, volume_percent: Number($("#playback-volume").value), loop: $("#loop-enabled").checked, shuffle: $("#shuffle-enabled").checked }, normalization: { ...current.normalization, enabled: true, target_lufs: Number($("#target-lufs").value), true_peak_db: Number($("#true-peak").value) }, linkplay: current.linkplay, media: { base_url: $("#media-base-url").value.trim(), port: Number($("#media-port").value) }, mqtt: { enabled: $("#mqtt-enabled").checked, host: $("#mqtt-host").value.trim(), port: Number($("#mqtt-port").value), username: $("#mqtt-username").value.trim(), discovery_prefix: $("#mqtt-discovery-prefix").value.trim(), topic_prefix: $("#mqtt-topic-prefix").value.trim() }, devices };
+  }
+
+  function addDevice() {
+    const current = state.config || {};
+    const devices = current.devices || [];
+    if (devices.length >= 8) return toast("A configuração aceita no máximo 8 AudioCast.", true);
+    const used = new Set(devices.map((device) => device.device_id));
+    let deviceId = "varanda";
+    let number = devices.length + 1;
+    while (used.has(deviceId)) deviceId = `audiocast-${number++}`;
+    const name = deviceId === "varanda" ? "Varanda" : `AudioCast ${number - 1}`;
+    state.config = { ...current, devices: [...devices, { device_id: deviceId, name, host: deviceId, port: 80, enabled: false, volume_percent: 90, timeout_seconds: 5, https: false }] };
+    fillSettings();
+    toast(`${name} adicionado. Informe o IP ou DNS antes de habilitar.`);
   }
 
   function collectMqttCredentials() {
@@ -151,7 +169,7 @@
 
   document.addEventListener("click", (event) => {
     const tab = event.target.closest("[data-tab]"); if (tab) { $$(".tab").forEach((item) => item.classList.toggle("active", item === tab)); $$(".tab-panel").forEach((panel) => panel.classList.toggle("active", panel.id === `tab-${tab.dataset.tab}`)); if (tab.dataset.tab === "diagnostics") runDiagnostics(); if (tab.dataset.tab === "logs") loadLogs(); }
-    const action = event.target.closest("[data-action]"); if (action) { if (action.dataset.action === "sync") triggerSync(); if (action.dataset.action === "refresh") refresh(); if (action.dataset.action === "diagnostics") runDiagnostics(); if (action.dataset.action === "logs") loadLogs(); if (action.dataset.action === "group-test") testGroup(); }
+    const action = event.target.closest("[data-action]"); if (action) { if (action.dataset.action === "sync") triggerSync(); if (action.dataset.action === "refresh") refresh(); if (action.dataset.action === "diagnostics") runDiagnostics(); if (action.dataset.action === "logs") loadLogs(); if (action.dataset.action === "group-test") testGroup(); if (action.dataset.action === "add-device") addDevice(); }
     const playback = event.target.closest("[data-playback]"); if (playback) playbackAction(playback.dataset.playback);
     const retry = event.target.closest("[data-retry]"); if (retry) retryTrack(retry.dataset.retry);
     const removeSchedule = event.target.closest("[data-remove-sync]"); if (removeSchedule) { const values = [...document.querySelectorAll("[data-sync-time]")].map((input) => input.value).filter(Boolean); values.splice(Number(removeSchedule.dataset.removeSync), 1); renderSyncTimes(values); }

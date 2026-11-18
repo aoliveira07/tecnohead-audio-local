@@ -9,7 +9,8 @@ def test_default_config_contains_operational_values(config):
     assert config.playback.window_start == "05:30"
     assert config.playback.window_end == "21:30"
     assert config.playback.volume_percent == 90
-    assert [device.host for device in config.devices] == ["192.168.0.13", "192.168.0.14"]
+    assert [device.host for device in config.devices] == ["192.168.0.13", "192.168.0.14", "varanda"]
+    assert config.devices[2].enabled is False
     assert config.normalization.target_lufs == -18
     assert config.normalization.true_peak_db == -2
 
@@ -35,6 +36,17 @@ def test_config_store_migrates_legacy_spotify_and_default_schedule(paths):
     assert config.schema_version == 2
     assert config.sync.times == ["11:00", "15:00"]
     assert not hasattr(config, "spotify_client_secret")
+
+
+def test_config_store_adds_disabled_varanda_to_existing_two_zone_config(paths):
+    paths.config_file.parent.mkdir(parents=True, exist_ok=True)
+    paths.config_file.write_text('{"devices": [{"device_id": "caixa", "name": "Caixa", "host": "192.168.0.13"}, {"device_id": "restaurante", "name": "Restaurante", "host": "192.168.0.14"}]}', encoding="utf-8")
+
+    config = ConfigStore(paths).load()
+
+    assert [device.device_id for device in config.devices] == ["caixa", "restaurante", "varanda"]
+    assert config.devices[-1].name == "Varanda"
+    assert config.devices[-1].enabled is False
 
 
 def test_redact_object_recurses():

@@ -181,7 +181,14 @@ class ConfigStore:
         data.setdefault("linkplay", {})
         data.setdefault("media", {})
         data.setdefault("mqtt", {})
-        data.setdefault("devices", AppConfig().model_dump(mode="json")["devices"])
+        default_devices = AppConfig().model_dump(mode="json")["devices"]
+        data.setdefault("devices", default_devices)
+        configured_devices = data.get("devices")
+        if isinstance(configured_devices, list) and len(configured_devices) < 8 and not any(
+            isinstance(device, dict) and device.get("device_id") == "varanda" for device in configured_devices
+        ):
+            varanda = next(device for device in default_devices if device["device_id"] == "varanda")
+            data["devices"] = [*configured_devices, varanda]
         # v0.1.x exposed Spotify credentials even though playlist discovery
         # uses the public page/embed fallback. Drop those fields permanently.
         data.pop("spotify_client_id", None)

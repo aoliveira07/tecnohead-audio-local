@@ -250,6 +250,7 @@ class AppConfig(BaseModel):
         default_factory=lambda: [
             DeviceConfig(device_id="caixa", name="Caixa", host="192.168.0.13"),
             DeviceConfig(device_id="restaurante", name="Restaurante", host="192.168.0.14"),
+            DeviceConfig(device_id="varanda", name="Varanda", host="varanda", enabled=False),
         ],
         min_length=1,
         max_length=8,

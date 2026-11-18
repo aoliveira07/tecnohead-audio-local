@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from conftest import make_entry
 
-from app.models import AppConfig
+from app.models import AppConfig, DeviceConfig
 from app.playback import PlaybackSupervisor
 from app.scheduler import is_within_window, next_sync_at
 
@@ -39,6 +39,7 @@ class FakeLinkPlay:
         return {
             "caixa": {"device_id": "caixa", "name": "Caixa", "host": "192.168.0.13", "online": True, "status": "stop", "position_ms": 0, "duration_ms": 0, "volume_percent": 90},
             "restaurante": {"device_id": "restaurante", "name": "Restaurante", "host": "192.168.0.14", "online": True, "status": "stop", "position_ms": 0, "duration_ms": 0, "volume_percent": 90},
+            "varanda": {"device_id": "varanda", "name": "Varanda", "host": "192.168.0.15", "online": True, "status": "stop", "position_ms": 0, "duration_ms": 0, "volume_percent": 90},
         }
 
     async def play_group(self, *args, **kwargs):
@@ -109,4 +110,31 @@ async def test_supervisor_uses_device_playlist_for_multiple_tracks(paths, config
     assert state.active is True
     assert state.playlist_mode is True
     assert fake.calls[0][2]["playlist_url"].startswith("http://192.168.0.50:18198/playlist.m3u8?")
+
+
+@pytest.mark.asyncio
+async def test_supervisor_includes_third_enabled_audiocast_in_group(paths, library, states):
+    entries = [make_entry(0, title="Faixa 1"), make_entry(1, title="Faixa 2")]
+    for entry in entries:
+        library.upsert_entry(entry)
+        destination = paths.library / "tracks" / f"{entry.entry_id}.mp3"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"audio")
+        library.set_ready(entry.entry_id, relative_path=f"tracks/{entry.entry_id}.mp3", file_path=destination, normalization={"mode": "fake", "target_lufs": -18, "true_peak_db": -2, "output_format": "mp3", "completed_at": "now"})
+    config = AppConfig(
+        media={"base_url": "http://192.168.0.50:18198", "port": 18198},
+        devices=[
+            DeviceConfig(device_id="caixa", name="Caixa", host="192.168.0.13"),
+            DeviceConfig(device_id="restaurante", name="Restaurante", host="192.168.0.14"),
+            DeviceConfig(device_id="varanda", name="Varanda", host="192.168.0.15"),
+        ],
+    )
+    fake = FakeLinkPlay()
+    supervisor = PlaybackSupervisor(config, paths, library, fake, states[0], states[1])
+
+    state = await supervisor.tick(datetime(2026, 11, 8, 10, 0, tzinfo=ZoneInfo("America/Sao_Paulo")))
+
+    assert state.active is True
+    assert fake.calls[0][1][0] == "caixa"
+    assert fake.calls[0][1][1] == ["restaurante", "varanda"]
 
