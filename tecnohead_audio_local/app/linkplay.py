@@ -153,14 +153,27 @@ class LinkPlayClient:
         payload = await self._send(device, "getStatus")
         if not isinstance(payload, dict):
             raise LinkPlayError(f"identidade inválida de {device.name}")
+        def value(*keys: str) -> object:
+            for key in keys:
+                if key in payload:
+                    return payload[key]
+            return ""
+
         return {
             "device_id": device.device_id,
             "name": device.name,
             "host": device.host,
-            "firmware": str(payload.get("Firmware", payload.get("firmware", ""))),
-            "hardware": str(payload.get("Hardware", payload.get("hardware", ""))),
-            "device_name": _decode_hex_text(payload.get("DeviceName", payload.get("device_name", ""))),
-            "uuid": str(payload.get("Uuid", payload.get("uuid", "")))[:64],
+            "firmware": str(value("Firmware", "firmware")),
+            "hardware": str(value("Hardware", "hardware")),
+            "device_name": _decode_hex_text(value("DeviceName", "device_name")),
+            "uuid": str(value("Uuid", "uuid"))[:64],
+            "group": _as_int(value("Group", "group")),
+            "master_uuid": str(value("MasterUuid", "master_uuid", "masterUuid"))[:64],
+            "wmrm_version": str(value("wmrm_version", "WmrmVersion", "wmrmVersion")),
+            "network": {
+                "eth2": str(value("eth2", "Eth2")),
+                "apcli0": str(value("apcli0", "Apcli0")),
+            },
             "raw_keys": sorted(str(key) for key in payload),
         }
 
@@ -244,29 +257,61 @@ class LinkPlayClient:
 
     async def join_group(self, master_id: str, member_ids: list[str]) -> dict[str, Any]:
         master = self._device(master_id)
+        commands = await self._send_join_commands(master, member_ids, attempt="initial")
+        if self.config.linkplay.verify_group_after_join:
+            await self._wait_for_group_settle()
+            verified = await self.check_group(master_id, member_ids)
+        else:
+            verified = {"confirmed": False, "reason": "read-back desabilitado"}
+
+        recovery: list[dict[str, Any]] = []
+        if not verified.get("confirmed") and self.config.linkplay.verify_group_after_join:
+            missing_hosts = set(verified.get("missing_hosts") or [])
+            missing_ids = [member_id for member_id in member_ids if self._device(member_id).host in missing_hosts]
+            # Some AudioCast firmware keeps a standalone/Line-In state after a
+            # previous grouping attempt. Reset only members that the master
+            # says are missing, then retry the documented join command.
+            for member_id in missing_ids:
+                for command in ("multiroom:Ungroup", "setMultiroomLogic:1"):
+                    try:
+                        await self.command(member_id, command)
+                        recovery.append({"member_id": member_id, "command": command, "accepted": True})
+                    except LinkPlayError as exc:
+                        recovery.append({"member_id": member_id, "command": command, "accepted": False, "error": redact_text(str(exc))})
+            if missing_ids:
+                await self._wait_for_group_settle()
+                commands.extend(await self._send_join_commands(master, missing_ids, attempt="recovery"))
+                await self._wait_for_group_settle()
+                verified = await self.check_group(master_id, member_ids)
+        if not verified.get("confirmed"):
+            missing = ", ".join(verified.get("missing_hosts") or []) or "membro desconhecido"
+            raise LinkPlayError(f"grupo não confirmado pelo status do mestre; ausentes: {missing}")
+        return {"ok": True, "confirmed": True, "commands": commands, "recovery": recovery, "group": verified}
+
+    async def _send_join_commands(self, master: DeviceConfig, member_ids: list[str], *, attempt: str) -> list[dict[str, Any]]:
         commands: list[dict[str, Any]] = []
         for member_id in member_ids:
             member = self._device(member_id)
             command = self.config.linkplay.join_command_template.format(master_host=master.host, member_host=member.host)
             await self.command(member.device_id, command)
-            commands.append({"member_id": member.device_id, "command": command.replace(master.host, "[host]").replace(member.host, "[host]")})
-        if self.config.linkplay.verify_group_after_join:
-            verified = await self.check_group(master_id, member_ids)
-        else:
-            verified = {"confirmed": False, "reason": "read-back desabilitado"}
-        if not verified.get("confirmed"):
-            raise LinkPlayError("comando de agrupamento aceito, mas o grupo não foi confirmado pelo status do mestre")
-        return {"ok": True, "confirmed": True, "commands": commands, "group": verified}
+            commands.append({"member_id": member.device_id, "attempt": attempt, "command": command.replace(master.host, "[host]").replace(member.host, "[host]")})
+        return commands
+
+    async def _wait_for_group_settle(self) -> None:
+        delay = max(0.1, min(1.0, self.config.linkplay.retry_delay_seconds))
+        await asyncio.sleep(delay)
 
     async def ungroup(self, master_id: str) -> Any:
         return await self.command(master_id, "multiroom:Ungroup")
 
     async def set_group_volume(self, master_id: str, member_ids: list[str], volume_percent: int) -> dict[str, Any]:
-        await self.command(master_id, f"setPlayerCmd:slave_vol:{volume_percent}")
+        limits = [self._device(device_id).volume_percent for device_id in [master_id, *member_ids]]
+        effective_volume = min(volume_percent, *limits)
+        await self.command(master_id, f"setPlayerCmd:slave_vol:{effective_volume}")
         results: dict[str, Any] = {}
         for device_id in [master_id, *member_ids]:
-            results[device_id] = await self.set_volume(device_id, volume_percent)
-        return {"ok": True, "volume_percent": volume_percent, "devices": results}
+            results[device_id] = await self.set_volume(device_id, effective_volume)
+        return {"ok": True, "requested_volume_percent": volume_percent, "volume_percent": effective_volume, "devices": results}
 
     async def play_group(self, master_id: str, member_ids: list[str], url: str, *, loop: bool, shuffle: bool, volume_percent: int, playlist_url: str | None = None) -> dict[str, Any]:
         group = await self.check_group(master_id, member_ids)

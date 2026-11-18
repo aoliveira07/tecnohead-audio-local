@@ -59,6 +59,9 @@ class Runtime:
         self.started = False
 
     def apply_config(self, config: AppConfig) -> AppConfig:
+        previous_devices = tuple((device.device_id, device.host, device.port, device.https, device.enabled) for device in self.config.devices)
+        new_devices = tuple((device.device_id, device.host, device.port, device.https, device.enabled) for device in config.devices)
+        topology_changed = previous_devices != new_devices
         self.config = self.config_store.save(config)
         self.linkplay.update_config(self.config)
         self.sync.update_config(self.config)
@@ -66,6 +69,9 @@ class Runtime:
         self.scheduler.update_config(self.config)
         self.diagnostics_service.update_config(self.config)
         self.mqtt.update_config(self.config)
+        if topology_changed:
+            self.playback.invalidate_group()
+            self.events.append("playback_group_invalidated", "alteração de zonas exige novo agrupamento LinkPlay")
         return self.config
 
     def public_config(self) -> dict[str, Any]:

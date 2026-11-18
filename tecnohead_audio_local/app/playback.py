@@ -34,6 +34,12 @@ class PlaybackSupervisor:
         self.config = config
         self.linkplay.update_config(config)
 
+    def invalidate_group(self) -> None:
+        state = self.state()
+        state.group_confirmed = False
+        state.group_device_ids = []
+        self._save(state)
+
     def state(self) -> PlaybackState:
         return self.state_store.load_playback()
 
@@ -111,6 +117,7 @@ class PlaybackSupervisor:
         state.last_error = None
         state.failure_count = 0
         state.group_confirmed = bool(result.get("confirmed"))
+        state.group_device_ids = [master_id, *members]
         self.events.append("playback_started", "faixa enviada ao grupo LinkPlay", entry_id=track.entry_id, reason=reason, group_confirmed=state.group_confirmed)
         return state
 
@@ -125,6 +132,7 @@ class PlaybackSupervisor:
                     await self._stop_devices([device.device_id for device in self.config.devices if device.enabled])
                     state.active = False
                     state.group_confirmed = False
+                    state.group_device_ids = []
                     state.playlist_mode = False
                     state.last_action = "window_closed"
                     state.last_command_confirmed_at = utc_now()
@@ -170,7 +178,9 @@ class PlaybackSupervisor:
                 ended = (not state.playlist_mode and bool(duration and position >= max(0, duration - 2))) or status_value in {"stop", "stopped"}
                 expected_devices = {device.device_id for device in self.config.devices if device.enabled}
                 device_degraded = any(not statuses.get(device_id, {}).get("online", False) for device_id in expected_devices)
-                needs_start = not state.active or not state.group_confirmed or state.current_track_id != track.entry_id or status_value in {"unknown", "pause", "paused"} or ended or device_degraded
+                expected_group = [device.device_id for device in self.config.devices if device.enabled]
+                group_topology_changed = state.group_device_ids != expected_group
+                needs_start = not state.active or not state.group_confirmed or group_topology_changed or state.current_track_id != track.entry_id or status_value in {"unknown", "pause", "paused"} or ended or device_degraded
                 if ended and state.current_track_id == track.entry_id and len(tracks) > 1:
                     track = self._next_track(state) or track
                 if needs_start:
@@ -201,12 +211,14 @@ class PlaybackSupervisor:
             elif action == "pause":
                 await self.linkplay.pause(master_id)
                 state.active = False
+                state.group_device_ids = []
                 state.playlist_mode = False
                 state.last_action = "pause"
                 state.last_command_confirmed_at = utc_now()
             elif action == "stop":
                 await self._stop_devices([master_id, *members])
                 state.active = False
+                state.group_device_ids = []
                 state.playlist_mode = False
                 state.last_action = "stop"
                 state.last_command_confirmed_at = utc_now()

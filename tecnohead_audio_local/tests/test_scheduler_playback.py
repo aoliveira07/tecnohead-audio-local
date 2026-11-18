@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from conftest import make_entry
 
-from app.models import AppConfig, DeviceConfig
+from app.models import AppConfig, DeviceConfig, PlaybackState
 from app.playback import PlaybackSupervisor
 from app.scheduler import is_within_window, next_sync_at
 
@@ -29,6 +29,17 @@ def test_media_url_preserves_explicit_stream_port():
     supervisor = PlaybackSupervisor(AppConfig(media={"base_url": "http://192.168.0.20:18198"}), None, None, None, None, None)
     url = supervisor._media_url("entry-123")
     assert url.startswith("http://192.168.0.20:18198/stream/entry-123?")
+
+
+def test_supervisor_invalidates_persisted_group_after_zone_change(paths, states):
+    states[0].save_playback(PlaybackState(active=True, group_confirmed=True, group_device_ids=["caixa", "restaurante"]))
+    supervisor = PlaybackSupervisor(AppConfig(), paths, None, None, states[0], states[1])
+
+    supervisor.invalidate_group()
+
+    state = states[0].load_playback()
+    assert state.group_confirmed is False
+    assert state.group_device_ids == []
 
 
 class FakeLinkPlay:

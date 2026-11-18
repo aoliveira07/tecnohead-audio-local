@@ -23,6 +23,23 @@ class FakeRequester:
         return HttpResponse(200, "OK")
 
 
+class RecoveringRequester(FakeRequester):
+    def __init__(self):
+        super().__init__()
+        self.group_reads = 0
+
+    async def __call__(self, url, params, timeout, *, verify):
+        command = params["command"]
+        if command == "multiroom:getSlaveList":
+            self.commands.append((url, command))
+            self.group_reads += 1
+            members = '[{"ip":"192.168.0.14","volume":90}]'
+            if self.group_reads >= 2:
+                members = '[{"ip":"192.168.0.14","volume":90},{"ip":"192.168.0.15","volume":90}]'
+            return HttpResponse(200, f'{{"slaves":{2 if self.group_reads >= 2 else 1},"wmrm_version":"4.2","slave_list":{members}}}')
+        return await super().__call__(url, params, timeout, verify=verify)
+
+
 @pytest.mark.asyncio
 async def test_linkplay_builds_safe_commands_and_confirms_group(config):
     requester = FakeRequester()
@@ -37,6 +54,35 @@ async def test_linkplay_builds_safe_commands_and_confirms_group(config):
     assert any(command.startswith("setPlayerCmd:play:http://") for _, command in requester.commands)
     await client.play_m3u("caixa", "http://192.168.0.50:18198/playlist.m3u8?token=redacted-token")
     assert any(command.startswith("setPlayerCmd:m3u:play:http://") for _, command in requester.commands)
+
+
+@pytest.mark.asyncio
+async def test_linkplay_recovers_a_missing_member_before_failing(config):
+    config.devices[2].enabled = True
+    config.devices[2].host = "192.168.0.15"
+    requester = RecoveringRequester()
+    client = LinkPlayClient(config, requester)
+
+    result = await client.join_group("caixa", ["restaurante", "varanda"])
+
+    assert result["confirmed"] is True
+    assert any(item["command"] == "multiroom:Ungroup" for item in result["recovery"])
+    assert any(item["attempt"] == "recovery" for item in result["commands"])
+
+
+@pytest.mark.asyncio
+async def test_linkplay_group_volume_respects_lowest_zone_limit(config):
+    config.devices[2].enabled = True
+    config.devices[2].volume_percent = 60
+    requester = FakeRequester()
+    client = LinkPlayClient(config, requester)
+
+    result = await client.set_group_volume("caixa", ["restaurante", "varanda"], 90)
+
+    assert result["requested_volume_percent"] == 90
+    assert result["volume_percent"] == 60
+    assert "setPlayerCmd:slave_vol:60" in [command for _, command in requester.commands]
+    assert requester.commands[-1][1] == "setPlayerCmd:vol:60"
 
 
 @pytest.mark.asyncio

@@ -50,8 +50,22 @@ class DiagnosticsService:
 
     async def run(self) -> dict[str, Any]:
         status = await self.linkplay.status_all()
+        identities: dict[str, dict[str, Any]] = {}
         group = None
         enabled = [device.device_id for device in self.config.devices if device.enabled]
+        notes = [
+            "A resposta LinkPlay confirma apenas a API HTTP; áudio audível exige homologação física.",
+            "O endpoint de mídia é separado do Ingress e não oferece API administrativa.",
+        ]
+        if enabled:
+            lowest_volume = min(device.volume_percent for device in self.config.devices if device.enabled)
+            if self.config.playback.volume_percent > lowest_volume:
+                notes.append(f"O alvo global de volume ({self.config.playback.volume_percent}%) excede o menor limite configurado ({lowest_volume}%); o grupo aplicará o limite menor.")
+        for device_id in enabled:
+            try:
+                identities[device_id] = await self.linkplay.identity(device_id)
+            except Exception as exc:
+                identities[device_id] = {"device_id": device_id, "error": str(exc)}
         if enabled:
             try:
                 group = await self.linkplay.check_group(enabled[0], enabled[1:])
@@ -73,15 +87,13 @@ class DiagnosticsService:
             },
             "storage": {"space": self._space(), "permissions": self._write_checks()},
             "devices": status,
+            "identities": identities,
             "group": group,
             "supervisor": {"state": "not_used", "reason": "este App não depende da API do Supervisor para operar"},
             "library": self.library.summary(),
             "sync": self.sync.current_state().model_dump(mode="json"),
             "playback": self.state.load_playback().model_dump(mode="json"),
-            "notes": [
-                "A resposta LinkPlay confirma apenas a API HTTP; áudio audível exige homologação física.",
-                "O endpoint de mídia é separado do Ingress e não oferece API administrativa.",
-            ],
+            "notes": notes,
         }
         return redact_object(payload)
 

@@ -384,6 +384,7 @@ class PlaybackState(BaseModel):
     last_error: str | None = None
     failure_count: int = 0
     group_confirmed: bool = False
+    group_device_ids: list[str] = Field(default_factory=list)
     playlist_mode: bool = False
     devices: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
