@@ -5,14 +5,17 @@ O cliente usa HTTP GET em `http(s)://<host>:<port>/httpapi.asp?command=...` com 
 - `getPlayerStatus`, `getStatus`;
 - `setPlayerCmd:play:<URI>`, `pause`, `resume`, `stop`, `next`, `prev`;
 - `setPlayerCmd:vol:<0-100>`, `setPlayerCmd:slave_vol:<0-100>`;
+- `multiroom:SlaveVolume:<guest_ip>:<0-100>` para volume individual de cada convidado;
 - `setPlayerCmd:loopmode:0|1|2`;
 - `multiroom:getSlaveList`, `multiroom:Ungroup`;
 - `ConnectMasterAp:JoinGroupMaster:eth<master_ip>:wifi0.0.0.0` enviado ao membro.
 
 Após um `getSlaveList` que ainda não confirma algum membro, o App reseta
 somente os membros ausentes (`multiroom:Ungroup` e `setMultiroomLogic:1`) e
-repete o ingresso, sempre exigindo nova confirmação do mestre. O volume efetivo
-do grupo é limitado pelo menor limite configurado entre as zonas.
+repete o ingresso, sempre exigindo nova confirmação do mestre. O volume do
+mestre usa `setPlayerCmd:slave_vol`; o volume de cada convidado usa
+`multiroom:SlaveVolume:<guest_ip>:<volume>`. Assim, o alvo global pode ser 90%
+com uma zona limitada a 60%, sem reduzir as outras zonas.
 
 Esses comandos são uma hipótese configurável baseada na API LinkPlay pública e na integração LinkPlay do Home Assistant. Firmware presente nos AudioCast pode usar semântica ou transporte diferente, inclusive HTTPS. O App não registra tokens em URL de logs e não informa sucesso quando há timeout ou quando o read-back do grupo não confirma o membro.
 

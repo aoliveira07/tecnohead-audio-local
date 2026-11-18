@@ -56,6 +56,14 @@ class PlaybackSupervisor:
             raise PlaybackError("nenhum AudioCast está habilitado")
         return enabled[0], enabled[1:]
 
+    def _desired_volumes(self, volume_percent: int | None = None) -> dict[str, int]:
+        requested = self.config.playback.volume_percent if volume_percent is None else volume_percent
+        return {
+            device.device_id: min(requested, device.volume_percent)
+            for device in self.config.devices
+            if device.enabled
+        }
+
     def _media_url(self, entry_id: str) -> str:
         try:
             return media_url(self.config, entry_id)
@@ -186,6 +194,15 @@ class PlaybackSupervisor:
                 if needs_start:
                     state = await self._start_track(state, track, reason="supervisor")
                 else:
+                    desired_volumes = self._desired_volumes()
+                    volume_drift = any(
+                        statuses.get(device_id, {}).get("volume_percent") is not None
+                        and statuses[device_id]["volume_percent"] != target
+                        for device_id, target in desired_volumes.items()
+                    )
+                    if volume_drift:
+                        await self.linkplay.set_group_volume(master_id, _members, self.config.playback.volume_percent)
+                        self.events.append("playback_volume_reapplied", "volumes por zona reaplicados após leitura diferente do alvo")
                     state.current_position = int(master_status.get("position_ms") or 0)
                     state.last_error = None
                     state.last_success_at = utc_now()
@@ -241,8 +258,6 @@ class PlaybackSupervisor:
         if not 0 <= volume_percent <= 100:
             raise PlaybackError("volume deve estar entre 0 e 100")
         master_id, members = self._device_ids()
-        if volume_percent > min(device.volume_percent for device in self.config.devices if device.enabled):
-            raise PlaybackError("volume acima do limite configurado de um AudioCast")
         await self.linkplay.set_group_volume(master_id, members, volume_percent)
         state = self.state()
         state.last_action = f"volume:{volume_percent}"

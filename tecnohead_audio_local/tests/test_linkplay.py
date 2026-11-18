@@ -71,8 +71,9 @@ async def test_linkplay_recovers_a_missing_member_before_failing(config):
 
 
 @pytest.mark.asyncio
-async def test_linkplay_group_volume_respects_lowest_zone_limit(config):
+async def test_linkplay_group_volume_applies_per_zone_limits(config):
     config.devices[2].enabled = True
+    config.devices[2].host = "192.168.0.15"
     config.devices[2].volume_percent = 60
     requester = FakeRequester()
     client = LinkPlayClient(config, requester)
@@ -80,9 +81,13 @@ async def test_linkplay_group_volume_respects_lowest_zone_limit(config):
     result = await client.set_group_volume("caixa", ["restaurante", "varanda"], 90)
 
     assert result["requested_volume_percent"] == 90
-    assert result["volume_percent"] == 60
-    assert "setPlayerCmd:slave_vol:60" in [command for _, command in requester.commands]
-    assert requester.commands[-1][1] == "setPlayerCmd:vol:60"
+    assert result["volume_percent"] == 90
+    assert result["device_volumes"] == {"caixa": 90, "restaurante": 90, "varanda": 60}
+    commands = [command for _, command in requester.commands]
+    assert "setPlayerCmd:slave_vol:90" in commands
+    assert "multiroom:SlaveVolume:192.168.0.14:90" in commands
+    assert "multiroom:SlaveVolume:192.168.0.15:60" in commands
+    assert not any(command == "setPlayerCmd:vol:60" for command in commands)
 
 
 @pytest.mark.asyncio
@@ -101,8 +106,10 @@ async def test_linkplay_applies_repeat_mode_after_loading_playlist(config):
     )
 
     commands = [command for _, command in requester.commands]
-    assert commands[-2].startswith("setPlayerCmd:m3u:play:http://")
-    assert commands[-1] == "setPlayerCmd:loopmode:0"
+    assert commands[-4].startswith("setPlayerCmd:m3u:play:http://")
+    assert commands[-3] == "setPlayerCmd:loopmode:0"
+    assert commands[-2] == "setPlayerCmd:slave_vol:90"
+    assert commands[-1] == "multiroom:SlaveVolume:192.168.0.14:90"
 
 
 @pytest.mark.asyncio

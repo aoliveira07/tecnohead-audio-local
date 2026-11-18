@@ -1,6 +1,6 @@
 FROM ghcr.io/home-assistant/base-debian:trixie
 
-ARG BUILD_VERSION=0.2.6
+ARG BUILD_VERSION=0.2.7
 ARG BUILD_ARCH=local
 
 LABEL \

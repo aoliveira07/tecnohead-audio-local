@@ -305,23 +305,45 @@ class LinkPlayClient:
         return await self.command(master_id, "multiroom:Ungroup")
 
     async def set_group_volume(self, master_id: str, member_ids: list[str], volume_percent: int) -> dict[str, Any]:
-        limits = [self._device(device_id).volume_percent for device_id in [master_id, *member_ids]]
-        effective_volume = min(volume_percent, *limits)
-        await self.command(master_id, f"setPlayerCmd:slave_vol:{effective_volume}")
-        results: dict[str, Any] = {}
-        for device_id in [master_id, *member_ids]:
-            results[device_id] = await self.set_volume(device_id, effective_volume)
-        return {"ok": True, "requested_volume_percent": volume_percent, "volume_percent": effective_volume, "devices": results}
+        device_ids = [master_id, *member_ids]
+        targets = {
+            device_id: min(volume_percent, self._device(device_id).volume_percent)
+            for device_id in device_ids
+        }
+
+        # LinkPlay has two different volume controls in a multiroom zone:
+        # slave_vol controls the host, while SlaveVolume targets a guest by
+        # IP. Sending setPlayerCmd:vol directly to a guest is not reliable on
+        # firmware that exposes the guest only through the host.
+        results: dict[str, Any] = {
+            master_id: await self.command(master_id, f"setPlayerCmd:slave_vol:{targets[master_id]}")
+        }
+        for member_id in member_ids:
+            member = self._device(member_id)
+            results[member_id] = await self.command(
+                master_id,
+                f"multiroom:SlaveVolume:{member.host}:{targets[member_id]}",
+            )
+        return {
+            "ok": True,
+            "requested_volume_percent": volume_percent,
+            "volume_percent": targets[master_id],
+            "device_volumes": targets,
+            "devices": results,
+        }
 
     async def play_group(self, master_id: str, member_ids: list[str], url: str, *, loop: bool, shuffle: bool, volume_percent: int, playlist_url: str | None = None) -> dict[str, Any]:
         group = await self.check_group(master_id, member_ids)
         if not group.get("confirmed"):
             group = await self.join_group(master_id, member_ids)
-        await self.set_group_volume(master_id, member_ids, volume_percent)
         command_result = await (self.play_m3u(master_id, playlist_url) if playlist_url else self.play_url(master_id, url))
         # Some AudioCast firmware resets the repeat mode when a new M3U is
         # loaded. Apply it after the source is selected so playlist playback
         # cannot fall back to repeat-one (mode 1).
         await self.set_loop(master_id, loop, shuffle)
-        return {"ok": True, "confirmed": True, "group": group, "command": command_result}
+        # Loading a new source can restore the device's persisted volume. Set
+        # the per-zone levels after the source and loop mode are selected so
+        # the next track starts with the configured levels as well.
+        volume_result = await self.set_group_volume(master_id, member_ids, volume_percent)
+        return {"ok": True, "confirmed": True, "group": group, "command": command_result, "volume": volume_result}
 

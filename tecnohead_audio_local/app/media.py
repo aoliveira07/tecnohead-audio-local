@@ -52,6 +52,11 @@ def playlist_text(config: AppConfig, tracks: list[Track], *, start_entry_id: str
     lines = ["#EXTM3U"]
     for track in ordered:
         title = f"{_m3u_text(track.artist)} - {_m3u_text(track.title)}".strip(" -")
-        lines.append(f"#EXTINF:{int(track.duration_seconds or -1)},{title}")
+        # The source playlist duration can differ slightly from the decoded
+        # and normalized file. LinkPlay uses EXTINF while advancing an M3U;
+        # prefer the measured output duration to avoid cutting the tail or
+        # waiting past EOF on older AudioCast firmware.
+        duration = track.normalization.duration_seconds if track.normalization and track.normalization.duration_seconds else track.duration_seconds
+        lines.append(f"#EXTINF:{int(round(duration)) if duration else -1},{title}")
         lines.append(media_url(config, track.entry_id))
     return "\n".join(lines) + "\n"

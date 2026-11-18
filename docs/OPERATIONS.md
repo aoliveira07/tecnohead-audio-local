@@ -6,7 +6,7 @@
 2. Adicione o repositório do App no Supervisor e instale a versão desejada.
 3. Abra o Ingress e configure a playlist.
 4. A playlist pública não exige Client ID/Secret do Spotify. Se o broker MQTT exigir autenticação, informe usuário e senha na seção MQTT; a senha nunca é exibida novamente.
-5. Informe os IPs/nomes dos AudioCast e volume máximo; os defaults são Caixa `192.168.0.13` e Restaurante `192.168.0.14`, ambos 90%.
+5. Informe os IPs/nomes dos AudioCast e o volume de cada zona; os defaults são Caixa `192.168.0.13` e Restaurante `192.168.0.14`, ambos 90%. Se a Varanda ficar em 60%, o alvo global de 90% continuará em 90% nas outras zonas e será limitado somente na Varanda.
 6. Informe a URL LAN do stream, como `http://192.168.0.10:18198`. Esse é o IP do host HA visível pelos AudioCast, não o URL do Ingress.
 7. Execute diagnóstico individual, grupo, sincronização manual e reprodução com volume seguro.
 8. Depois da homologação, habilite a supervisão automática.

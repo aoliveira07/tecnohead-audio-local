@@ -60,12 +60,22 @@ class DiagnosticsService:
         if enabled:
             lowest_volume = min(device.volume_percent for device in self.config.devices if device.enabled)
             if self.config.playback.volume_percent > lowest_volume:
-                notes.append(f"O alvo global de volume ({self.config.playback.volume_percent}%) excede o menor limite configurado ({lowest_volume}%); o grupo aplicará o limite menor.")
+                notes.append(f"O alvo global de volume ({self.config.playback.volume_percent}%) excede o limite de uma zona ({lowest_volume}%); cada AudioCast receberá seu próprio volume efetivo.")
         for device_id in enabled:
             try:
                 identities[device_id] = await self.linkplay.identity(device_id)
             except Exception as exc:
                 identities[device_id] = {"device_id": device_id, "error": str(exc)}
+        firmware_by_device = {
+            device_id: identity.get("firmware")
+            for device_id, identity in identities.items()
+            if identity.get("firmware")
+        }
+        if len(set(firmware_by_device.values())) > 1:
+            firmware_label = ", ".join(f"{device_id}: {firmware}" for device_id, firmware in firmware_by_device.items())
+            notes.append(
+                f"Os AudioCast estão com firmwares diferentes ({firmware_label}); isso pode afetar a fluidez do multiroom e deve ser considerado na homologação física."
+            )
         if enabled:
             try:
                 group = await self.linkplay.check_group(enabled[0], enabled[1:])

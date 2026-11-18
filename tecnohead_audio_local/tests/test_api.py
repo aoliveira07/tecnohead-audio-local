@@ -72,7 +72,7 @@ async def test_media_playlist_endpoint_returns_ready_tracks(paths, monkeypatch):
             entry.entry_id,
             relative_path=f"tracks/{entry.entry_id}.mp3",
             file_path=destination,
-            normalization={"mode": "fake", "target_lufs": -18, "true_peak_db": -2, "output_format": "mp3", "completed_at": "now"},
+            normalization={"mode": "fake", "target_lufs": -18, "true_peak_db": -2, "duration_seconds": 121.4, "output_format": "mp3", "completed_at": "now"},
         )
     app.state.runtime = runtime
     media_app.state.runtime = runtime
@@ -84,7 +84,7 @@ async def test_media_playlist_endpoint_returns_ready_tracks(paths, monkeypatch):
         assert response.headers["content-type"].startswith("audio/x-mpegurl")
         lines = response.text.splitlines()
         assert lines[0] == "#EXTM3U"
-        assert lines[1].startswith("#EXTINF:120,Artista - Faixa 2")
+        assert lines[1].startswith("#EXTINF:121,Artista - Faixa 2")
         assert "/stream/" + runtime.library.ready_tracks()[1].entry_id in lines[2]
         assert "/stream/" + runtime.library.ready_tracks()[0].entry_id in lines[4]
         assert ":18198/stream/" in response.text
